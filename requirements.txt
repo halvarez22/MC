@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydub
+librosa
+spacy
+# For es_core_news_lg, recommend installing via spacy download
+reportlab
+openai-whisper
