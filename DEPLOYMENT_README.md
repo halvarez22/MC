@@ -53,6 +53,13 @@ Si ves una página en blanco:
 - ✅ **Configuración Vite** optimizada para assets estáticos
 - ✅ **Service Worker** configurado correctamente para PWA
 
+### Service Worker y PWA
+- ✅ **Archivos PWA movidos** a carpeta `public/` (service-worker.js, manifest.json)
+- ✅ **SPA routing corregido** para excluir archivos estáticos
+- ✅ **Registro de Service Worker** agregado al index.html
+- ✅ **MIME types correctos** para archivos JavaScript y JSON
+- ✅ **Error 401 resuelto** en archivos estáticos
+
 ## 🌐 URL de Producción
 Después del despliegue, Vercel te proporcionará una URL como:
 `https://mc-app.vercel.app`
