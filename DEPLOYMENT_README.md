@@ -47,6 +47,12 @@ Si ves una página en blanco:
 - ✅ **MIME types correctos** para archivos JavaScript y manifest
 - ✅ **Routing SPA** funcionando correctamente
 
+### Imágenes no Cargan
+- ✅ **Imágenes movidas** a carpeta `public/` para correcto serving estático
+- ✅ **Manifest.json** actualizado con logo válido del partido
+- ✅ **Configuración Vite** optimizada para assets estáticos
+- ✅ **Service Worker** configurado correctamente para PWA
+
 ## 🌐 URL de Producción
 Después del despliegue, Vercel te proporcionará una URL como:
 `https://mc-app.vercel.app`
