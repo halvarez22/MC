@@ -4,7 +4,7 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/((?!api|_next|service-worker\\.js|manifest\\.json|images/).*)",
+      "source": "/((?!api|_next|static/|images/).*)",
       "destination": "/index.html"
     }
   ]
