@@ -83,8 +83,8 @@
       // Register service worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          console.log('Intentando registrar ServiceWorker desde /static/service-worker.js');
-          navigator.serviceWorker.register('/static/service-worker.js')
+          console.log('Intentando registrar ServiceWorker desde /service-worker.js');
+          navigator.serviceWorker.register('/service-worker.js')
             .then((registration) => {
               console.log('✅ ServiceWorker registrado correctamente:', registration.scope);
             })
