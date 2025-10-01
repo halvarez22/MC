@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistema de Gestión de Afiliados</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#ff5f00" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'primary': '#ff5f00',
+              'primary-dark': '#e65600',
+              'primary-light': '#ff8c00',
+              'primary-lightest': '#fff0e6',
+              'secondary': '#4B5563', 
+              'light': '#ffffff', // Main background color - clean white
+              'dark': '#1F2937',
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        font-family: 'Montserrat', sans-serif;
+      }
+      /* Custom styles for responsive tables */
+      @media (max-width: 767px) {
+        .responsive-table thead {
+          display: none;
+        }
+        .responsive-table tbody, .responsive-table tr, .responsive-table td {
+          display: block;
+        }
+        .responsive-table tr {
+          margin-bottom: 1rem;
+          border-radius: 0.5rem;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+          border: 1px solid #e5e7eb; /* gray-200 */
+          background-color: #ffffff;
+        }
+        .responsive-table td {
+          padding: 1rem;
+          text-align: right;
+          border-bottom: 1px solid #e5e7eb; /* gray-200 */
+        }
+        .responsive-table tr td:last-child {
+          border-bottom: none;
+        }
+        .responsive-table td:before {
+          content: attr(data-label);
+          font-weight: 600;
+          color: #4B5563; /* secondary color */
+          float: left;
+          text-align: left;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-light">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

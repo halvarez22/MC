@@ -1,0 +1,7 @@
+{
+  "name": "Sistema de Gestión de Afiliados",
+  "description": "Un sistema administrativo integral para un partido político, diseñado para gestionar eficientemente la información y los procesos de afiliación, con dashboards ejecutivos y reportes estadísticos.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

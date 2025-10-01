@@ -1,0 +1,15 @@
+{
+  "short_name": "Afiliados",
+  "name": "Sistema de Gestión de Afiliados",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ff5f00",
+  "background_color": "#ffffff"
+}
