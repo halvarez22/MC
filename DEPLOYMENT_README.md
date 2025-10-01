@@ -54,13 +54,13 @@ Si ves una página en blanco:
 - ✅ **Service Worker** configurado correctamente para PWA
 
 ### Service Worker y PWA
-- ✅ **Archivos PWA organizados** en carpeta `static/` separada
-- ✅ **Plugin Vite personalizado** para copia automática al build
-- ✅ **SPA routing corregido** para excluir `/static/` del routing
+- ✅ **Archivos PWA movidos** a carpeta `public/` para manejo automático de Vite
+- ✅ **Configuración Vite simplificada** eliminando plugins complejos
+- ✅ **SPA routing corregido** en `vercel.json`
 - ✅ **Registro de Service Worker** con logs de debug detallados
-- ✅ **MIME types correctos** para archivos JavaScript y JSON
-- ✅ **Error 401 resuelto** - archivos accesibles correctamente
-- ✅ **Manifest automático de Vite deshabilitado** para usar el nuestro
+- ✅ **MIME types correctos** - archivos servidos desde la raíz del dominio
+- ✅ **Error 401 resuelto** - manifest.json accesible en `/manifest.json`
+- ✅ **Service Worker operativo** - registrado desde `/service-worker.js`
 
 ## 🌐 URL de Producción
 Después del despliegue, Vercel te proporcionará una URL como:
