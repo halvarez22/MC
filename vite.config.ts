@@ -18,6 +18,20 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      publicDir: 'public',
+      build: {
+        assetsDir: 'assets',
+        rollupOptions: {
+          output: {
+            assetFileNames: (assetInfo) => {
+              if (assetInfo.name?.endsWith('.png') || assetInfo.name?.endsWith('.jpg') || assetInfo.name?.endsWith('.svg')) {
+                return 'images/[name].[hash][extname]';
+              }
+              return 'assets/[name].[hash][extname]';
+            }
+          }
+        }
       }
     };
 });

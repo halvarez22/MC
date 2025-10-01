@@ -1,14 +1,15 @@
 {
-  "short_name": "Afiliados",
-  "name": "Sistema de Gestión de Afiliados",
+  "short_name": "MC Afiliados",
+  "name": "Sistema de Gestión de Afiliados MC",
   "icons": [
     {
-      "src": "/vite.svg",
-      "type": "image/svg+xml",
-      "sizes": "192x192 512x512"
+      "src": "/images/MC Blanco Transparente.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
   "theme_color": "#ff5f00",
   "background_color": "#ffffff"
