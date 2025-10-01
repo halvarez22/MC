@@ -20,7 +20,7 @@
               'primary-dark': '#e65600',
               'primary-light': '#ff8c00',
               'primary-lightest': '#fff0e6',
-              'secondary': '#4B5563', 
+              'secondary': '#4B5563',
               'light': '#ffffff', // Main background color - clean white
               'dark': '#1F2937',
             },
@@ -79,5 +79,19 @@
   <body class="bg-light">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      // Register service worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('ServiceWorker registrado correctamente:', registration.scope);
+            })
+            .catch((error) => {
+              console.log('Fallo en el registro del ServiceWorker:', error);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
