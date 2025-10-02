@@ -31,14 +31,14 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, onToggleSidebar, unread
       <div className="flex items-center space-x-4">
         <div className="w-10 h-10 flex items-center justify-center">
           <img
-            src="/MC Naranja Transparente.png"
+            src="/images/MC Naranja Transparente.png"
             alt="Logo MC Naranja"
             className="w-full h-full object-contain"
           />
         </div>
         <button
           onClick={onToggleSidebar}
-          className="lg:hidden text-gray-500 hover:text-gray-800"
+          className="lg:hidden p-2 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 min-w-[44px] min-h-[44px] flex items-center justify-center"
           aria-label="Abrir menú"
         >
           {ICONS.menu}
@@ -48,7 +48,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, onToggleSidebar, unread
         <div ref={panelRef} className="relative">
           <button
             onClick={() => setIsNotificationsOpen(prev => !prev)}
-            className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+            className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center relative"
             aria-label="Ver notificaciones"
           >
             {ICONS.bell}

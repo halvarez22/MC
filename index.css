@@ -11,25 +11,35 @@
     display: block;
   }
   .responsive-table tr {
-    margin-bottom: 1rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    margin-bottom: 1.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     border: 1px solid #e5e7eb; /* gray-200 */
     background-color: #ffffff;
+    padding: 0.5rem;
   }
   .responsive-table td {
-    padding: 1rem;
+    padding: 1rem 1.5rem;
     text-align: right;
-    border-bottom: 1px solid #e5e7eb; /* gray-200 */
+    border-bottom: 1px solid #f3f4f6; /* gray-100 */
+    min-height: 3rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   .responsive-table tr td:last-child {
     border-bottom: none;
+    padding-top: 1.5rem;
   }
   .responsive-table td:before {
     content: attr(data-label);
     font-weight: 600;
-    color: #4B5563; /* secondary color */
-    float: left;
+    color: #374151; /* gray-700 */
     text-align: left;
+    flex: 1;
+    font-size: 0.875rem;
+  }
+  .responsive-table td[data-label="Acciones"] {
+    justify-content: center;
   }
 }

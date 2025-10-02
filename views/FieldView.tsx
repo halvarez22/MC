@@ -40,7 +40,7 @@ const FieldView: React.FC<FieldViewProps> = ({ user, onLogout }) => {
       </header>
 
       <main className="flex-grow p-4 sm:p-6 lg:p-8">
-         <div className="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+         <div className="max-w-2xl mx-auto bg-white p-4 sm:p-6 rounded-lg shadow-lg">
              <h2 className="text-2xl font-bold text-gray-900 mb-2">Nuevo Registro de Afiliado</h2>
              <p className="text-gray-600 mb-6">Completa el formulario para registrar un nuevo miembro. La ubicación y las fotos se pueden tomar en el momento.</p>
              <SelfRegistrationForm 

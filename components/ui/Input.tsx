@@ -19,7 +19,7 @@ const Input: React.FC<InputProps> = ({ label, id, error, ...props }) => {
         <input
           id={id}
           {...props}
-          className={`appearance-none block w-full px-3 py-2 border rounded-md shadow-sm sm:text-sm ${error ? errorClasses : defaultClasses}`}
+          className={`appearance-none block w-full px-3 py-3 border rounded-md shadow-sm text-base sm:text-sm min-h-[44px] ${error ? errorClasses : defaultClasses}`}
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-error` : undefined}
         />
