@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for responsive tables */
+@media (max-width: 767px) {
+  .responsive-table thead {
+    display: none;
+  }
+  .responsive-table tbody, .responsive-table tr, .responsive-table td {
+    display: block;
+  }
+  .responsive-table tr {
+    margin-bottom: 1rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    border: 1px solid #e5e7eb; /* gray-200 */
+    background-color: #ffffff;
+  }
+  .responsive-table td {
+    padding: 1rem;
+    text-align: right;
+    border-bottom: 1px solid #e5e7eb; /* gray-200 */
+  }
+  .responsive-table tr td:last-child {
+    border-bottom: none;
+  }
+  .responsive-table td:before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #4B5563; /* secondary color */
+    float: left;
+    text-align: left;
+  }
+}

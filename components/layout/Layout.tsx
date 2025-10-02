@@ -29,7 +29,7 @@ const Layout: React.FC<LayoutProps> = ({ user, onLogout, currentView, onNavigate
   };
   
   return (
-    <div className="flex h-screen bg-light">
+    <div className="flex h-screen bg-gray-50">
       <Sidebar 
         currentView={currentView} 
         onNavigate={onNavigate} 

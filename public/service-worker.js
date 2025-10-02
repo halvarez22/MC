@@ -3,7 +3,8 @@ const CACHE_NAME = 'afiliados-cache-v1';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  'https://cdn.tailwindcss.com',
+  '/index.css',
+  '/manifest.json',
   'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap'
 ];
 
@@ -19,7 +20,16 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Intercepta las peticiones de red.
+  // No interceptar peticiones que comiencen con @ o sean archivos de desarrollo
+  if (event.request.url.includes('@') ||
+      event.request.url.includes('vite') ||
+      event.request.url.includes('node_modules') ||
+      event.request.url.includes('.tsx') ||
+      event.request.url.includes('.ts')) {
+    return; // Dejar que pase sin cache
+  }
+
+  // Intercepta las peticiones de red solo para recursos estáticos.
   event.respondWith(
     caches.match(event.request)
       .then(response => {

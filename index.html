@@ -10,24 +10,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              'primary': '#ff5f00',
-              'primary-dark': '#e65600',
-              'primary-light': '#ff8c00',
-              'primary-lightest': '#fff0e6',
-              'secondary': '#4B5563',
-              'light': '#ffffff', // Main background color - clean white
-              'dark': '#1F2937',
-            },
-          }
-        }
-      }
-    </script>
     <style>
       body {
         font-family: 'Montserrat', sans-serif;
@@ -76,12 +58,12 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-light">
+  <body class="bg-gray-50 font-sans">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>
-      // Register service worker
-      if ('serviceWorker' in navigator) {
+      // Register service worker only in production
+      if ('serviceWorker' in navigator && import.meta.env.PROD) {
         window.addEventListener('load', () => {
           console.log('Intentando registrar ServiceWorker desde /service-worker.js');
           navigator.serviceWorker.register('/service-worker.js')
@@ -93,6 +75,8 @@
               console.error('Error details:', error.message);
             });
         });
+      } else if ('serviceWorker' in navigator && !import.meta.env.PROD) {
+        console.log('ServiceWorker desactivado en modo desarrollo');
       } else {
         console.log('ServiceWorker no soportado en este navegador');
       }
