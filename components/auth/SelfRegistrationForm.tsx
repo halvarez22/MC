@@ -32,7 +32,7 @@ const initialFormData: Omit<Affiliate, 'id' | 'createdAt' | 'documentation' | 's
     zip: '',
 };
 
-const DOCUMENT_TYPES: Document['type'][] = ['INE', 'Comprobante de Domicilio', 'Estado de Cuenta'];
+const DOCUMENT_TYPES: Document['type'][] = ['INE Frontal', 'INE Posterior'];
 
 const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, isFieldMode = false, fieldUser }) => {
     const [formData, setFormData] = useState(initialFormData);

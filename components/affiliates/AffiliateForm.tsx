@@ -15,7 +15,7 @@ interface AffiliateFormProps {
   user: User;
 }
 
-const DOCUMENT_TYPES: Document['type'][] = ['INE', 'Comprobante de Domicilio', 'Estado de Cuenta'];
+const DOCUMENT_TYPES: Document['type'][] = ['INE Frontal', 'INE Posterior'];
 
 const initialFormData: Omit<Affiliate, 'id' | 'createdAt' | 'documentation'> = {
     fullName: '',

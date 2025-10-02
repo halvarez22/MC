@@ -16,9 +16,8 @@ const mockAffiliates: Affiliate[] = [
     zip: '06000',
     status: 'activo',
     documentation: [
-      { id: 'd1', type: 'INE', status: 'approved', fileName: 'ine_juan.pdf' },
-      { id: 'd2', type: 'Comprobante de Domicilio', status: 'approved', fileName: 'domicilio_juan.pdf' },
-      { id: 'd3', type: 'Estado de Cuenta', status: 'pending', fileName: 'cuenta_juan.pdf' },
+      { id: 'd1', type: 'INE Frontal', status: 'approved', fileName: 'ine_frontal_juan.pdf' },
+      { id: 'd2', type: 'INE Posterior', status: 'pending', fileName: 'ine_posterior_juan.pdf' },
     ],
   },
   {
@@ -33,8 +32,8 @@ const mockAffiliates: Affiliate[] = [
     zip: '64000',
     status: 'inactivo',
     documentation: [
-      { id: 'd4', type: 'INE', status: 'approved', fileName: 'ine_maria.jpg' },
-      { id: 'd5', type: 'Comprobante de Domicilio', status: 'rejected', rejectionReason: 'No coincide la dirección', fileName: 'domicilio_maria.png' },
+      { id: 'd4', type: 'INE Frontal', status: 'approved', fileName: 'ine_frontal_maria.jpg' },
+      { id: 'd5', type: 'INE Posterior', status: 'rejected', rejectionReason: 'Imagen poco clara, favor subir foto más nítida', fileName: 'ine_posterior_maria.png' },
     ],
   },
   {

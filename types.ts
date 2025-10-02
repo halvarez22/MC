@@ -12,7 +12,7 @@ export interface User {
 
 export interface Document {
   id: string;
-  type: 'INE' | 'Comprobante de Domicilio' | 'Estado de Cuenta';
+  type: 'INE Frontal' | 'INE Posterior';
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason?: string;
   fileName?: string;
