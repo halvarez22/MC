@@ -7,6 +7,8 @@ import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { MEXICAN_STATES } from '../../constants';
 import ConfirmationModal from '../ui/ConfirmationModal';
+import INEProcessor from '../ine/INEProcessor';
+import { INEData } from '../../services/ocrService';
 
 interface AffiliateFormProps {
   affiliate: Affiliate | null;
@@ -62,6 +64,9 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
     const [fileUploads, setFileUploads] = useState<Record<string, FileUploadState>>({});
     const [errors, setErrors] = useState<FormErrors>({});
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [currentStep, setCurrentStep] = useState<'form' | 'ine-capture' | 'documents'>('form');
+    const [ineImages, setIneImages] = useState<{ frontal: File; posterior: File } | null>(null);
+    const [extractedINEData, setExtractedINEData] = useState<INEData | null>(null);
 
     useEffect(() => {
         if (affiliate) {
@@ -116,6 +121,38 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
         }
         
         return newErrors;
+    };
+
+    const handleINEDataExtracted = (data: INEData, images: { frontal: File; posterior: File }) => {
+        setExtractedINEData(data);
+        setIneImages(images);
+
+        // Pre-llenar el formulario con los datos extraídos del INE
+        setFormData(prev => ({
+            ...prev,
+            fullName: data.name || prev.fullName,
+            address: data.address || prev.address,
+            // Aquí podríamos agregar más campos si coinciden con el formulario
+        }));
+
+        setCurrentStep('documents');
+    };
+
+    const handleINECancel = () => {
+        setCurrentStep('form');
+    };
+
+    const handleFormContinue = () => {
+        const formErrors = validateForm();
+        if (Object.keys(formErrors).length === 0) {
+            setCurrentStep('ine-capture');
+        } else {
+            setErrors(formErrors);
+        }
+    };
+
+    const handleBackToForm = () => {
+        setCurrentStep('form');
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -199,6 +236,23 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
                     status: 'pending' as const,
                     fileName: fileUploads[type]!.file!.name
                 }));
+
+                // Agregar documentos del INE si existen
+                if (ineImages) {
+                    newDocumentation.push({
+                        id: '',
+                        type: 'INE Frontal',
+                        status: 'pending' as const,
+                        fileName: ineImages.frontal.name
+                    });
+                    newDocumentation.push({
+                        id: '',
+                        type: 'INE Posterior',
+                        status: 'pending' as const,
+                        fileName: ineImages.posterior.name
+                    });
+                }
+
                 dataToSave = { ...formData, documentation: newDocumentation };
             }
 
@@ -393,8 +447,96 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
     const isCreateMode = !affiliate;
     const areAllFilesSelected = isCreateMode ? DOCUMENT_TYPES.every(type => !!fileUploads[type]?.file) : true;
 
+    // Render different steps based on current step
+    if (currentStep === 'ine-capture') {
+        return (
+            <INEProcessor
+                onDataExtracted={handleINEDataExtracted}
+                onCancel={handleINECancel}
+            />
+        );
+    }
+
     return (
         <>
+            {/* Step indicator */}
+            <div className="mb-6">
+                <div className="flex items-center justify-center space-x-4">
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                        currentStep === 'form' ? 'bg-primary text-white' :
+                        'bg-green-100 text-green-600'
+                    }`}>
+                        1
+                    </div>
+                    <div className={`flex-1 h-1 ${
+                        currentStep === 'form' ? 'bg-gray-200' : 'bg-green-400'
+                    }`} />
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                        currentStep === 'ine-capture' ? 'bg-primary text-white' :
+                        currentStep === 'form' ? 'bg-gray-200 text-gray-400' :
+                        'bg-green-100 text-green-600'
+                    }`}>
+                        2
+                    </div>
+                    <div className={`flex-1 h-1 ${
+                        currentStep === 'documents' ? 'bg-green-400' : 'bg-gray-200'
+                    }`} />
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                        currentStep === 'documents' ? 'bg-primary text-white' : 'bg-gray-200 text-gray-400'
+                    }`}>
+                        3
+                    </div>
+                </div>
+                <div className="flex justify-between mt-2 text-xs text-gray-500">
+                    <span className={currentStep === 'form' ? 'text-primary font-medium' : ''}>Datos Personales</span>
+                    <span className={currentStep === 'ine-capture' ? 'text-primary font-medium' : ''}>Captura INE</span>
+                    <span className={currentStep === 'documents' ? 'text-primary font-medium' : ''}>Documentos</span>
+                </div>
+            </div>
+
+            {/* Mostrar datos extraídos del INE si están disponibles */}
+            {extractedINEData && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-center space-x-2 mb-3">
+                        <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <h4 className="text-sm font-medium text-green-800">Datos extraídos automáticamente del INE</h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <span className="font-medium text-gray-700">Nombre:</span>
+                            <p className="text-gray-900">{extractedINEData.name}</p>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">CURP:</span>
+                            <p className="text-gray-900 font-mono">{extractedINEData.curp}</p>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Clave de Elector:</span>
+                            <p className="text-gray-900 font-mono">{extractedINEData.voterId}</p>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Estado:</span>
+                            <p className="text-gray-900">{extractedINEData.state}</p>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Municipio:</span>
+                            <p className="text-gray-900">{extractedINEData.municipality}</p>
+                        </div>
+                        <div>
+                            <span className="font-medium text-gray-700">Sección:</span>
+                            <p className="text-gray-900">{extractedINEData.section}</p>
+                        </div>
+                    </div>
+                    <p className="text-xs text-green-700 mt-3">
+                        Los campos del formulario se han completado automáticamente con estos datos. Puedes modificarlos si es necesario.
+                    </p>
+                </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Input id="fullName" name="fullName" label="Nombre Completo" value={formData.fullName} onChange={handleChange} error={errors.fullName} required />
@@ -440,12 +582,18 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
                         </div>
                     )}
                     <div className="flex justify-end space-x-4">
-                        <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
-                            Cancelar
+                        <Button type="button" variant="secondary" onClick={currentStep === 'documents' ? handleBackToForm : onCancel} disabled={isLoading}>
+                            {currentStep === 'documents' ? '← Volver al Formulario' : 'Cancelar'}
                         </Button>
-                        <Button type="submit" isLoading={isLoading} disabled={isLoading || (isCreateMode && !areAllFilesSelected)}>
-                            {affiliate ? 'Guardar Cambios' : 'Crear Afiliado'}
-                        </Button>
+                        {currentStep === 'form' ? (
+                            <Button type="button" onClick={handleFormContinue} disabled={isLoading}>
+                                📷 Continuar con Captura de INE
+                            </Button>
+                        ) : (
+                            <Button type="submit" isLoading={isLoading} disabled={isLoading || (isCreateMode && !areAllFilesSelected)}>
+                                {affiliate ? 'Guardar Cambios' : 'Crear Afiliado'}
+                            </Button>
+                        )}
                     </div>
                 </div>
             </form>
