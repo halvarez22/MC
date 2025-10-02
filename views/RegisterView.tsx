@@ -15,6 +15,19 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onNavigateToLogin }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-light to-primary flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      {/* Botón de cerrar en la esquina superior */}
+      <div className="absolute top-4 left-4 sm:top-6 sm:left-6">
+        <button
+          onClick={onNavigateToLogin}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+          aria-label="Cerrar y volver al login"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="mx-auto h-20 w-20 text-white">{LOGO}</div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
@@ -39,15 +52,17 @@ const RegisterView: React.FC<RegisterViewProps> = ({ onNavigateToLogin }) => {
           ) : (
             <>
               <SelfRegistrationForm onSuccess={handleSuccess} />
-              <p className="mt-6 text-center text-sm text-gray-600">
-                ¿Ya tienes una cuenta?{' '}
+              <div className="mt-6 text-center">
+                <p className="text-sm text-gray-600 mb-3">
+                  ¿Ya tienes una cuenta?
+                </p>
                 <button
                   onClick={onNavigateToLogin}
-                  className="font-medium text-primary hover:text-primary-dark focus:outline-none focus:underline"
+                  className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
                 >
-                  Inicia sesión aquí
+                  ← Volver al Inicio de Sesión
                 </button>
-              </p>
+              </div>
             </>
           )}
         </div>
