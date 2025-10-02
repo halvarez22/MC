@@ -32,7 +32,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="mx-auto h-20 w-20 flex items-center justify-center">
             <img
-              src="/images/MC Blanco Transparente.png"
+              src="/MC Blanco Transparente.png"
               alt="Logo MC Blanco"
               className="w-full h-full object-contain"
             />

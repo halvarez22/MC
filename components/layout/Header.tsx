@@ -31,7 +31,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, onToggleSidebar, unread
       <div className="flex items-center space-x-4">
         <div className="w-10 h-10 flex items-center justify-center">
           <img
-            src="/images/MC Naranja Transparente.png"
+            src="/MC Naranja Transparente.png"
             alt="Logo MC Naranja"
             className="w-full h-full object-contain"
           />

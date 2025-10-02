@@ -3,7 +3,7 @@
   "name": "Sistema de Gestión de Afiliados MC",
   "icons": [
     {
-      "src": "/assets/MC Blanco Transparente.png",
+      "src": "/images/MC Blanco Transparente.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"

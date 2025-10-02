@@ -41,7 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpen, setI
         <div className="h-20 flex items-center justify-center border-b border-primary-dark shrink-0">
           <div className="w-10 h-10 mr-2 flex items-center justify-center">
             <img
-              src="/images/MC Negro Transparente.png"
+              src="/MC Negro Transparente.png"
               alt="Logo MC Negro"
               className="w-full h-full object-contain"
             />
