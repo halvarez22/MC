@@ -12,8 +12,9 @@ import RegisterView from './views/RegisterView';
 import FieldView from './views/FieldView';
 import UsersView from './views/UsersView';
 import ForcePasswordChangeView from './views/ForcePasswordChangeView';
+import INEDataView from './views/INEDataView';
 
-export type View = 'dashboard' | 'affiliates' | 'audit' | 'users';
+export type View = 'dashboard' | 'affiliates' | 'audit' | 'users' | 'ine-data';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -113,6 +114,8 @@ function App() {
         return <AuditLogView />;
       case 'users':
         return <UsersView user={user!} />;
+      case 'ine-data':
+        return <INEDataView />;
       default:
         return <DashboardView />;
     }

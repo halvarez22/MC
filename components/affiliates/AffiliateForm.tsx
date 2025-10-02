@@ -9,6 +9,7 @@ import { MEXICAN_STATES } from '../../constants';
 import ConfirmationModal from '../ui/ConfirmationModal';
 import INEProcessor from '../ine/INEProcessor';
 import { INEData } from '../../services/ocrService';
+import { INEData as TypeINEData } from '../../types';
 
 interface AffiliateFormProps {
   affiliate: Affiliate | null;
@@ -253,7 +254,31 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
                     });
                 }
 
-                dataToSave = { ...formData, documentation: newDocumentation };
+                // Preparar datos del INE si existen
+                let ineDataToSave: TypeINEData | undefined;
+                if (extractedINEData) {
+                    ineDataToSave = {
+                        name: extractedINEData.name,
+                        address: extractedINEData.address,
+                        voterId: extractedINEData.voterId,
+                        curp: extractedINEData.curp,
+                        registrationYear: extractedINEData.registrationYear,
+                        state: extractedINEData.state,
+                        municipality: extractedINEData.municipality,
+                        section: extractedINEData.section,
+                        locality: extractedINEData.locality,
+                        emission: extractedINEData.emission,
+                        validity: extractedINEData.validity,
+                        extractedAt: new Date().toISOString(),
+                        confidence: 0.85 // Valor por defecto, se puede mejorar después
+                    };
+                }
+
+                dataToSave = {
+                    ...formData,
+                    documentation: newDocumentation,
+                    ineData: ineDataToSave
+                };
             }
 
             await firebaseService.saveAffiliate(dataToSave, user);

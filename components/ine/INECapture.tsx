@@ -21,6 +21,8 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
 
   // Acceder a la cámara cuando el componente se monta
   useEffect(() => {
+    let isMounted = true;
+
     const startCamera = async () => {
       try {
         setIsLoading(true);
@@ -34,17 +36,35 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
           }
         });
 
-        setStream(mediaStream);
+        // Solo actualizar el estado si el componente sigue montado
+        if (isMounted) {
+          setStream(mediaStream);
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          videoRef.current.play();
+          if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream;
+            // Usar una promesa para manejar el play()
+            try {
+              await videoRef.current.play();
+            } catch (playError) {
+              console.warn('Error playing video:', playError);
+              // Intentar play() nuevamente después de un breve delay
+              setTimeout(() => {
+                if (videoRef.current && isMounted) {
+                  videoRef.current.play().catch(console.warn);
+                }
+              }, 100);
+            }
+          }
         }
       } catch (err) {
         console.error('Error accessing camera:', err);
-        setError('No se pudo acceder a la cámara. Asegúrate de dar permisos.');
+        if (isMounted) {
+          setError('No se pudo acceder a la cámara. Asegúrate de dar permisos.');
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -52,6 +72,7 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
 
     // Limpiar stream cuando el componente se desmonta
     return () => {
+      isMounted = false;
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }

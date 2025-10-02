@@ -299,6 +299,7 @@ export const firebaseService = {
             zip: affiliate.zip || '',
             status: affiliate.status || 'inactivo',
             documentation: newDocumentation,
+            ineData: affiliate.ineData, // Datos extraídos del INE por OCR
             latitude: affiliate.latitude,
             longitude: affiliate.longitude,
         };

@@ -18,6 +18,22 @@ export interface Document {
   fileName?: string;
 }
 
+export interface INEData {
+  name: string;
+  address: string;
+  voterId: string;
+  curp: string;
+  registrationYear: string;
+  state: string;
+  municipality: string;
+  section: string;
+  locality: string;
+  emission: string;
+  validity: string;
+  extractedAt: string; // Fecha de extracción OCR
+  confidence?: number; // Nivel de confianza del OCR
+}
+
 export interface Affiliate {
   id: string;
   createdAt: string;
@@ -30,6 +46,7 @@ export interface Affiliate {
   zip: string;
   status: 'activo' | 'inactivo';
   documentation: Document[];
+  ineData?: INEData; // Datos extraídos del INE mediante OCR
   latitude?: number;
   longitude?: number;
 }

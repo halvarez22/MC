@@ -13,6 +13,7 @@ const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard },
   { id: 'affiliates', label: 'Afiliados', icon: ICONS.affiliates },
   { id: 'users', label: 'Usuarios', icon: ICONS.userManagement },
+  { id: 'ine-data', label: 'Datos INE', icon: ICONS.ineData },
   { id: 'audit', label: 'Bitácora', icon: ICONS.audit },
 ];
 

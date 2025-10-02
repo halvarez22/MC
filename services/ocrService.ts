@@ -23,14 +23,23 @@ class OCRService {
   private apiKey: string;
 
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || '';
+    // Acceder a la variable de entorno definida en vite.config.ts
+    this.apiKey = (import.meta.env as any).VITE_GEMINI_API_KEY || '';
     if (!this.apiKey) {
-      console.warn('GEMINI_API_KEY not found in environment variables');
+      console.warn('VITE_GEMINI_API_KEY not found in environment variables');
     }
   }
 
   async extractINEData(imageFile: File): Promise<OCRResult> {
     try {
+      // Validar que tengamos la API key
+      if (!this.apiKey || this.apiKey === 'your_gemini_api_key_here' || this.apiKey === '') {
+        return {
+          success: false,
+          error: 'API key de Gemini no configurada. Crea un archivo .env con VITE_GEMINI_API_KEY=tu_api_key'
+        };
+      }
+
       // Convertir la imagen a base64
       const base64Image = await this.fileToBase64(imageFile);
 
