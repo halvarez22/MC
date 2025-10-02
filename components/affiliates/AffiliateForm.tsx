@@ -404,7 +404,7 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
                     <Input id="city" name="city" label="Ciudad" value={formData.city} onChange={handleChange} error={errors.city} required />
                     <div>
                         <label htmlFor="state" className="block text-sm font-medium text-gray-700">Estado</label>
-                        <select id="state" name="state" value={formData.state} onChange={handleChange} required className={`mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md ${errors.state ? 'border-red-500' : 'border-gray-300'}`}>
+                        <select id="state" name="state" value={formData.state} onChange={handleChange} required className={`mt-1 block w-full pl-3 pr-10 py-3 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md min-h-[44px] ${errors.state ? 'border-red-500' : 'border-gray-300'}`}>
                             {MEXICAN_STATES.map(state => <option key={state} value={state}>{state}</option>)}
                         </select>
                          {errors.state && <p className="mt-2 text-sm text-red-600">{errors.state}</p>}
@@ -412,7 +412,7 @@ const AffiliateForm: React.FC<AffiliateFormProps> = ({ affiliate, onFinished, on
                     <Input id="zip" name="zip" label="Código Postal" value={formData.zip} onChange={handleChange} error={errors.zip} required />
                     <div>
                         <label htmlFor="status" className="block text-sm font-medium text-gray-700">Estatus</label>
-                        <select id="status" name="status" value={formData.status} onChange={handleChange} required className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md">
+                        <select id="status" name="status" value={formData.status} onChange={handleChange} required className="mt-1 block w-full pl-3 pr-10 py-3 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md min-h-[44px]">
                             <option value="activo">Activo</option>
                             <option value="inactivo">Inactivo</option>
                         </select>
