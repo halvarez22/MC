@@ -80,7 +80,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, onToggleSidebar, unread
         </div>
         <button
           onClick={onLogout}
-          className="p-2 rounded-full text-gray-500 hover:bg-red-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+          className="p-2 rounded-full text-primary hover:bg-red-100 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
           aria-label="Cerrar sesión"
         >
           {ICONS.logout}
