@@ -150,7 +150,7 @@ export const firebaseService = {
     auth: {
         onAuthStateChanged: (callback: (user: User | null) => void): (() => void) => {
             setTimeout(() => {
-                const userJson = sessionStorage.getItem('firebase.auth.user');
+                const userJson = localStorage.getItem('firebase.auth.user');
                 const user = userJson ? JSON.parse(userJson) : null;
                 callback(user);
             }, 100);
@@ -158,18 +158,19 @@ export const firebaseService = {
         },
         signInWithEmailAndPassword: async (email: string, password: string): Promise<{ user: User | null; error: { message: string } | null }> => {
             await new Promise(res => setTimeout(res, 500));
-            
+
             let foundUser: User | undefined;
             if (email.toLowerCase() === 'admin') {
                 foundUser = mockUsers.find(u => u.role === 'admin' && u.email === 'admin@example.com');
             } else {
                 foundUser = mockUsers.find(u => u.email === email);
             }
-            
+
             // En una app real, la contraseña estaría hasheada. Aquí es una simulación simple.
             if (foundUser && (password === 'admin' || password === 'brigadista' || password === 'password123')) {
                 const userToStore = { ...foundUser };
-                sessionStorage.setItem('firebase.auth.user', JSON.stringify(userToStore));
+                // Usar localStorage en lugar de sessionStorage para persistencia entre sesiones/dispositivos
+                localStorage.setItem('firebase.auth.user', JSON.stringify(userToStore));
                 window.dispatchEvent(new Event('authChanged'));
                 return { user: userToStore, error: null };
             }
@@ -177,14 +178,14 @@ export const firebaseService = {
             return { user: null, error: { message: 'Credenciales inválidas' } };
         },
         signOut: async (): Promise<void> => {
-            sessionStorage.removeItem('firebase.auth.user');
+            localStorage.removeItem('firebase.auth.user');
             window.dispatchEvent(new Event('authChanged'));
         },
     },
 
     updateCurrentUserPassword: async (newPassword: string): Promise<void> => {
         await new Promise(res => setTimeout(res, 500));
-        const userJson = sessionStorage.getItem('firebase.auth.user');
+        const userJson = localStorage.getItem('firebase.auth.user');
         if (!userJson) {
             throw new Error("No hay un usuario autenticado.");
         }
@@ -197,7 +198,7 @@ export const firebaseService = {
 
         // Simular el cambio de contraseña (no almacenamos contraseñas en texto plano)
         console.log(`Contraseña para ${userInDb.email} cambiada a "${newPassword}" (simulado).`);
-        
+
         userInDb.requiresPasswordChange = false;
 
         const newLog: AuditLog = {
@@ -209,10 +210,10 @@ export const firebaseService = {
         };
         mockAuditLogs.unshift(newLog);
         notifyListeners(auditLogListeners, mockAuditLogs);
-        
+
         // Actualizar la sesión
         const updatedUserSession = { ...currentUser, requiresPasswordChange: false };
-        sessionStorage.setItem('firebase.auth.user', JSON.stringify(updatedUserSession));
+        localStorage.setItem('firebase.auth.user', JSON.stringify(updatedUserSession));
 
         notifyListeners(userListeners, mockUsers);
     },
