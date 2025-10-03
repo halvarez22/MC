@@ -2,7 +2,7 @@
 export interface User {
   uid: string;
   email: string | null;
-  role?: 'admin' | 'brigadista'; // Maintained for application-specific logic
+  role?: 'admin' | 'brigadista' | 'simpatizante'; // Maintained for application-specific logic
   fullName?: string;
   state?: string;
   city?: string;

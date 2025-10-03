@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import Tesseract from 'tesseract.js';
 import INECapture from './INECapture';
-import { ocrService, INEData, OCRResult } from '../../services/ocrService';
+import { groqService, INEStructuredData } from '../../services/groqService';
+import { savePendingINE } from '../../services/ineOfflineService';
+import { useSyncOffline } from '../../hooks/useSyncOffline';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 
 interface INEProcessorProps {
-  onDataExtracted: (data: INEData, images: { frontal: File; posterior: File }) => void;
+  onDataExtracted: (data: INEStructuredData, images: { frontal: File; posterior: File }) => void;
   onCancel: () => void;
 }
 
@@ -14,36 +17,95 @@ type ProcessorStep = 'capture' | 'processing' | 'review' | 'error';
 const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }) => {
   const [currentStep, setCurrentStep] = useState<ProcessorStep>('capture');
   const [images, setImages] = useState<{ frontal: File; posterior: File } | null>(null);
-  const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
+  const [rawText, setRawText] = useState<string>('');
+  const [structuredData, setStructuredData] = useState<INEStructuredData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Hook para sincronización offline
+  const { isOnline, syncNow } = useSyncOffline();
 
   const handleImagesCaptured = async (capturedImages: { frontal: File; posterior: File }) => {
     setImages(capturedImages);
     setCurrentStep('processing');
     setIsProcessing(true);
+    setRawText('');
+    setStructuredData(null);
 
     try {
-      const result = await ocrService.processINEImages(capturedImages.frontal, capturedImages.posterior);
+      console.log('📷 Iniciando procesamiento de INE...');
 
-      if (result.success && result.data) {
-        setOcrResult(result);
-        setCurrentStep('review');
+      // OCR local con Tesseract.js
+      console.log('🔍 Extrayendo texto con Tesseract.js...');
+      const { data: { text } } = await Tesseract.recognize(
+        capturedImages.frontal,
+        'spa', // español
+        {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              console.log(`OCR progreso: ${(m.progress * 100).toFixed(1)}%`);
+            }
+          }
+        }
+      );
+
+      const cleanText = text.trim();
+      console.log('📝 Texto extraído:', cleanText.substring(0, 100) + '...');
+      setRawText(cleanText);
+
+      // Convertir imagen a base64 para guardar offline
+      const imageData = await fileToBase64(capturedImages.frontal);
+
+      // Guardar siempre en IndexedDB (para offline)
+      const savedId = await savePendingINE(cleanText, imageData);
+      console.log(`💾 INE guardado offline con ID: ${savedId}`);
+
+      // Procesar con Groq si hay conexión
+      if (navigator.onLine) {
+        console.log('🌐 Procesando con Groq AI...');
+        try {
+          const structured = await groqService.processINEText(cleanText);
+          console.log('✅ Datos estructurados:', structured);
+          setStructuredData(structured);
+
+          // Marcar como procesado en el hook (esto se hará automáticamente)
+          // El hook se encargará de sincronizar cuando sea necesario
+        } catch (groqError) {
+          console.warn('⚠️ Groq falló, pero el texto crudo está guardado:', groqError);
+          // No es error crítico, el texto crudo ya está guardado
+        }
       } else {
-        setOcrResult(result);
-        setErrorMessage(result.error || 'Error desconocido en el procesamiento OCR');
-        setCurrentStep('error');
-        setShowErrorModal(true);
+        console.log('📱 Modo offline: INE guardado para procesar después');
       }
-    } catch (error) {
-      console.error('Error processing INE:', error);
-      setErrorMessage('Error al procesar las imágenes del INE');
+
+      setCurrentStep('review');
+
+    } catch (error: any) {
+      console.error('❌ Error procesando INE:', error);
+      setErrorMessage(error.message || 'Error al procesar las imágenes del INE');
       setCurrentStep('error');
       setShowErrorModal(true);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Utilidad para convertir File a base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remover el prefijo "data:image/jpeg;base64,"
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = () => reject(reader.error);
+    });
   };
 
   const handleRetryOCR = async () => {
@@ -54,17 +116,8 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
     setShowErrorModal(false);
 
     try {
-      const result = await ocrService.processINEImages(images.frontal, images.posterior);
-
-      if (result.success && result.data) {
-        setOcrResult(result);
-        setCurrentStep('review');
-      } else {
-        setOcrResult(result);
-        setErrorMessage(result.error || 'Error desconocido en el procesamiento OCR');
-        setCurrentStep('error');
-        setShowErrorModal(true);
-      }
+      // Reprocesar la imagen con OCR
+      await handleImagesCaptured(images);
     } catch (error) {
       console.error('Error retrying OCR:', error);
       setErrorMessage('Error al reprocesar las imágenes del INE');
@@ -76,16 +129,36 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
   };
 
   const handleAcceptData = () => {
-    if (ocrResult?.success && ocrResult.data && images) {
-      onDataExtracted(ocrResult.data, images);
+    // Usar datos estructurados si existen, sino crear un objeto básico con el texto crudo
+    const dataToSend = structuredData || {
+      nombre_completo: 'Texto extraído disponible',
+      domicilio: rawText,
+      clave_elector: '',
+      curp: '',
+      fecha_nacimiento: '',
+      fecha_emision: '',
+      fecha_vigencia: '',
+      seccion: '',
+      municipio: '',
+      estado: '',
+      localidad: ''
+    };
+
+    if (images) {
+      onDataExtracted(dataToSend, images);
     }
   };
 
   const handleRetryCapture = () => {
     setCurrentStep('capture');
     setImages(null);
-    setOcrResult(null);
+    setRawText('');
+    setStructuredData(null);
     setShowErrorModal(false);
+  };
+
+  const handleSyncNow = () => {
+    syncNow();
   };
 
   const renderProcessing = () => (
@@ -95,7 +168,15 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
         <h3 className="text-xl font-semibold text-gray-900 mb-2">
           Procesando INE con OCR
         </h3>
-        <p className="text-gray-600">
+        <div className="text-sm text-gray-600 space-y-1">
+          <p>🔍 <strong>Paso 1:</strong> OCR local con Tesseract.js</p>
+          {navigator.onLine ? (
+            <p>🤖 <strong>Paso 2:</strong> Estructuración con Groq AI</p>
+          ) : (
+            <p>📱 <strong>Modo offline:</strong> Solo OCR local</p>
+          )}
+        </div>
+        <p className="text-gray-600 mt-3">
           Extrayendo datos de la credencial de elector...
         </p>
         <p className="text-sm text-gray-500 mt-2">
@@ -106,19 +187,25 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
   );
 
   const renderReview = () => {
-    if (!ocrResult?.success || !ocrResult.data) return null;
-
-    const data = ocrResult.data;
+    const data = structuredData;
 
     return (
       <div className="space-y-6">
         <div className="text-center">
           <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            ✅ Datos Extraídos del INE
+            ✅ Procesamiento Completado
           </h3>
-          <p className="text-gray-600">
-            Revisa la información extraída y confirma que es correcta
-          </p>
+          <div className="flex items-center justify-center gap-4 text-sm">
+            <span className={`px-2 py-1 rounded-full text-xs ${navigator.onLine ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+              {navigator.onLine ? '🌐 Online' : '📱 Offline'}
+            </span>
+            <button
+              onClick={handleSyncNow}
+              className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs hover:bg-blue-200"
+            >
+              🔄 Sincronizar ahora
+            </button>
+          </div>
         </div>
 
         {/* Vista previa de imágenes */}
@@ -141,71 +228,96 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
           </div>
         </div>
 
-        {/* Datos extraídos */}
-        <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-          <h4 className="font-semibold text-gray-900 mb-4">Información Extraída:</h4>
+        {/* Texto crudo extraído */}
+        {rawText && (
+          <div className="bg-blue-50 rounded-lg p-4">
+            <h4 className="font-semibold text-blue-900 mb-2">📝 Texto Extraído (OCR):</h4>
+            <pre className="text-sm text-blue-800 whitespace-pre-wrap max-h-32 overflow-y-auto bg-white p-2 rounded border">
+              {rawText}
+            </pre>
+          </div>
+        )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <label className="font-medium text-gray-700">Nombre:</label>
-              <p className="text-gray-900 mt-1">{data.name || 'No disponible'}</p>
-            </div>
+        {/* Datos estructurados (solo si existen) */}
+        {data && (
+          <div className="bg-green-50 rounded-lg p-6 space-y-4">
+            <h4 className="font-semibold text-green-900 mb-4">🤖 Datos Estructurados (Groq AI):</h4>
 
-            <div>
-              <label className="font-medium text-gray-700">CURP:</label>
-              <p className="text-gray-900 mt-1 font-mono">{data.curp || 'No disponible'}</p>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <label className="font-medium text-gray-700">Nombre completo:</label>
+                <p className="text-gray-900 mt-1">{data.nombre_completo || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Clave de Elector:</label>
-              <p className="text-gray-900 mt-1 font-mono">{data.voterId || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">CURP:</label>
+                <p className="text-gray-900 mt-1 font-mono">{data.curp || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Estado:</label>
-              <p className="text-gray-900 mt-1">{data.state || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Clave de Elector:</label>
+                <p className="text-gray-900 mt-1 font-mono">{data.clave_elector || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Municipio:</label>
-              <p className="text-gray-900 mt-1">{data.municipality || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Fecha de nacimiento:</label>
+                <p className="text-gray-900 mt-1">{data.fecha_nacimiento || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Sección:</label>
-              <p className="text-gray-900 mt-1">{data.section || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Estado:</label>
+                <p className="text-gray-900 mt-1">{data.estado || 'No disponible'}</p>
+              </div>
 
-            <div className="md:col-span-2">
-              <label className="font-medium text-gray-700">Domicilio:</label>
-              <p className="text-gray-900 mt-1">{data.address || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Municipio:</label>
+                <p className="text-gray-900 mt-1">{data.municipio || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Año de Registro:</label>
-              <p className="text-gray-900 mt-1">{data.registrationYear || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Sección:</label>
+                <p className="text-gray-900 mt-1">{data.seccion || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Localidad:</label>
-              <p className="text-gray-900 mt-1">{data.locality || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Localidad:</label>
+                <p className="text-gray-900 mt-1">{data.localidad || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Emisión:</label>
-              <p className="text-gray-900 mt-1">{data.emission || 'No disponible'}</p>
-            </div>
+              <div>
+                <label className="font-medium text-gray-700">Fecha de emisión:</label>
+                <p className="text-gray-900 mt-1">{data.fecha_emision || 'No disponible'}</p>
+              </div>
 
-            <div>
-              <label className="font-medium text-gray-700">Vigencia:</label>
-              <p className="text-gray-900 mt-1">{data.validity || 'No disponible'}</p>
+              <div>
+                <label className="font-medium text-gray-700">Fecha de vigencia:</label>
+                <p className="text-gray-900 mt-1">{data.fecha_vigencia || 'No disponible'}</p>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="font-medium text-gray-700">Domicilio:</label>
+                <p className="text-gray-900 mt-1">{data.domicilio || 'No disponible'}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="flex gap-4 justify-center">
+        {!data && rawText && (
+          <div className="bg-yellow-50 rounded-lg p-4">
+            <h4 className="font-semibold text-yellow-900 mb-2">⚠️ Sin datos estructurados</h4>
+            <p className="text-yellow-800 text-sm">
+              El texto fue extraído correctamente, pero no se pudo procesar con Groq AI.
+              Puedes continuar con el texto crudo o intentar sincronizar más tarde.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3 justify-center">
           <Button onClick={handleRetryCapture} variant="secondary">
             ↻ Volver a capturar
+          </Button>
+          <Button onClick={handleRetryOCR} variant="secondary">
+            🔄 Reprocesar OCR
           </Button>
           <Button onClick={handleAcceptData}>
             ✅ Usar estos datos

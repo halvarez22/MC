@@ -63,7 +63,10 @@
     <script type="module" src="/index.tsx"></script>
     <script>
       // Register service worker only in production
-      if ('serviceWorker' in navigator && import.meta.env.PROD) {
+      // Usar una variable global en lugar de import.meta para evitar errores
+      const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+
+      if ('serviceWorker' in navigator && isProduction) {
         window.addEventListener('load', () => {
           console.log('Intentando registrar ServiceWorker desde /service-worker.js');
           navigator.serviceWorker.register('/service-worker.js')
@@ -75,7 +78,7 @@
               console.error('Error details:', error.message);
             });
         });
-      } else if ('serviceWorker' in navigator && !import.meta.env.PROD) {
+      } else if ('serviceWorker' in navigator && !isProduction) {
         console.log('ServiceWorker desactivado en modo desarrollo');
       } else {
         console.log('ServiceWorker no soportado en este navegador');

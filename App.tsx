@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from './types';
 import { firebaseService } from './services/firebaseService';
 import { offlineService } from './services/offlineService';
+import { useSyncOffline } from './hooks/useSyncOffline';
 import LoginView from './views/LoginView';
 import Layout from './components/layout/Layout';
 import DashboardView from './views/DashboardView';
@@ -21,6 +22,9 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
+
+  // Hook para sincronización offline de INEs
+  useSyncOffline();
 
   useEffect(() => {
     const unsubscribe = firebaseService.auth.onAuthStateChanged(currentUser => {

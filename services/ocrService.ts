@@ -23,10 +23,11 @@ class OCRService {
   private apiKey: string;
 
   constructor() {
-    // Acceder a la variable de entorno definida en vite.config.ts
-    this.apiKey = (import.meta.env as any).VITE_GEMINI_API_KEY || '';
+    // Acceder a la variable global definida por Vite
+    this.apiKey = (window as any)?.VITE_GEMINI_API_KEY || '';
+
     if (!this.apiKey) {
-      console.warn('VITE_GEMINI_API_KEY not found in environment variables');
+      console.warn('VITE_GEMINI_API_KEY not found. Make sure .env.local file exists with the correct API key');
     }
   }
 
@@ -85,8 +86,8 @@ Devuelve la información en formato JSON con las siguientes claves:
 IMPORTANTE: Solo devuelve el objeto JSON, sin texto adicional.
 `;
 
-      // Llamar a la API de Gemini
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent?key=${this.apiKey}`, {
+      // Llamar a la API de Gemini con modelo de visión
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro-vision:generateContent?key=${this.apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +98,7 @@ IMPORTANTE: Solo devuelve el objeto JSON, sin texto adicional.
               { text: prompt },
               {
                 inline_data: {
-                  mime_type: 'image/jpeg',
+                  mimeType: 'image/jpeg',
                   data: base64Image.split(',')[1] // Remover el prefijo data:image/jpeg;base64,
                 }
               }

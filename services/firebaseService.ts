@@ -5,9 +5,9 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 // --- In-memory data store ---
 
 let mockUsers: User[] = [
-    { 
-      uid: 'user123', 
-      email: 'admin@example.com', 
+    {
+      uid: 'user123',
+      email: 'admin@example.com',
       role: 'admin',
       fullName: 'Administrador Principal',
       state: 'Ciudad de México',
@@ -15,9 +15,9 @@ let mockUsers: User[] = [
       delegation: 'Cuauhtémoc',
       requiresPasswordChange: false,
     },
-    { 
-      uid: 'brigada456', 
-      email: 'brigadista@partido.com', 
+    {
+      uid: 'brigada456',
+      email: 'brigadista@partido.com',
       role: 'brigadista',
       fullName: 'Juan Brigadista',
       state: 'Jalisco',
@@ -25,15 +25,25 @@ let mockUsers: User[] = [
       delegation: 'Centro',
       requiresPasswordChange: false,
     },
-    { 
-      uid: 'brigada789', 
-      email: 'juan.brigadista@partido.com', 
+    {
+      uid: 'brigada789',
+      email: 'juan.brigadista@partido.com',
       role: 'brigadista',
       fullName: 'Juana de Arco',
       state: 'Nuevo León',
       city: 'Monterrey',
       delegation: 'San Pedro',
       requiresPasswordChange: true, // Para pruebas
+    },
+    {
+      uid: 'brigadista_test_001',
+      email: 'brigadista',
+      role: 'brigadista',
+      fullName: 'Brigadista de Prueba',
+      state: 'Ciudad de México',
+      city: 'Iztapalapa',
+      delegation: 'Centro',
+      requiresPasswordChange: false,
     },
 ];
 

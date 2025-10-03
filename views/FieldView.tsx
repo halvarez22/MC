@@ -10,11 +10,15 @@ interface FieldViewProps {
 }
 
 const FieldView: React.FC<FieldViewProps> = ({ user, onLogout }) => {
-  const handleSuccess = (isOffline: boolean) => {
+  const handleSuccess = (isOffline: boolean, userRegistered?: boolean) => {
     if (isOffline) {
         alert('Estás sin conexión. El afiliado se ha guardado localmente y se sincronizará cuando recuperes la conexión.');
     } else {
-        alert('¡Afiliado registrado y sincronizado con éxito!');
+        if (userRegistered) {
+            alert('¡Afiliado registrado exitosamente! Se ha creado una cuenta en la app y enviado un email de bienvenida al simpatizante.');
+        } else {
+            alert('¡Afiliado registrado exitosamente! Los datos han sido guardados en el sistema.');
+        }
     }
   };
 

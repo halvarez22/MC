@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0'
       },
       define: {
-        'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
+        // Hacer disponible la API key globalmente en el navegador
+        'window.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY)
       },
       resolve: {
         alias: {
