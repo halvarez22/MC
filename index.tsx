@@ -57,10 +57,50 @@ Y * PARQUE MANZANARES 37510
     }
   };
 
+  // Función para debug de autenticación
+  (window as any).debugAuth = async (email: string, password: string) => {
+    try {
+      console.log('🔍 Debug de autenticación:');
+      console.log('Email:', email);
+      console.log('Password:', password);
+
+      const { firebaseService } = await import('./services/firebaseService');
+
+      // Verificar usuarios disponibles
+      console.log('👥 Usuarios disponibles en mock:');
+      const mockUsers = [
+        { uid: 'user123', email: 'admin@example.com', role: 'admin' },
+        { uid: 'brigada456', email: 'brigadista@partido.com', role: 'brigadista' },
+        { uid: 'brigada789', email: 'juan.brigadista@partido.com', role: 'brigadista' },
+        { uid: 'brigadista_test_001', email: 'brigadista', role: 'brigadista' }
+      ];
+
+      const foundUser = mockUsers.find(u => u.email === email);
+      console.log('👤 Usuario encontrado:', foundUser);
+
+      // Verificar contraseña
+      const validPasswords = ['admin', 'brigadista', 'password123'];
+      const passwordValid = validPasswords.includes(password);
+      console.log('🔑 Contraseña válida:', passwordValid);
+
+      if (foundUser && passwordValid) {
+        console.log('✅ Autenticación debería funcionar');
+        return { success: true, user: foundUser };
+      } else {
+        console.log('❌ Autenticación fallará');
+        return { success: false, reason: foundUser ? 'Contraseña inválida' : 'Usuario no encontrado' };
+      }
+    } catch (error) {
+      console.error('❌ Error en debug:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   console.log('💡 Funciones disponibles:');
   console.log('  • clearINEData() - Limpia la base de datos IndexedDB');
   console.log('  • testOCR() - Prueba extracción OCR con texto de ejemplo');
   console.log('  • testOCR("tu texto aquí") - Prueba con texto personalizado');
+  console.log('  • debugAuth("email", "password") - Debug de autenticación');
 }
 
 const rootElement = document.getElementById('root');
