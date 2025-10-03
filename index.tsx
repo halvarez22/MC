@@ -96,11 +96,60 @@ Y * PARQUE MANZANARES 37510
     }
   };
 
+  // Función para probar login real
+  (window as any).testLogin = async (email: string, password: string) => {
+    try {
+      console.log('🚀 Probando login real con:', { email, password });
+
+      const { firebaseService } = await import('./services/firebaseService');
+
+      const result = await firebaseService.auth.signInWithEmailAndPassword(email, password);
+
+      console.log('📊 Resultado del login:', result);
+
+      if (result.user) {
+        console.log('✅ Login exitoso:', result.user);
+        return { success: true, user: result.user };
+      } else {
+        console.log('❌ Login fallido:', result.error);
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error('💥 Error en testLogin:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Función para verificar estado de autenticación
+  (window as any).checkAuthStatus = () => {
+    try {
+      console.log('🔍 Estado de autenticación actual:');
+
+      // Verificar localStorage
+      const storedUser = localStorage.getItem('firebase.auth.user');
+      console.log('💾 Usuario en localStorage:', storedUser ? JSON.parse(storedUser) : 'Ninguno');
+
+      // Verificar sessionStorage (por si acaso)
+      const sessionUser = sessionStorage.getItem('firebase.auth.user');
+      console.log('💾 Usuario en sessionStorage:', sessionUser ? JSON.parse(sessionUser) : 'Ninguno');
+
+      return {
+        localStorage: storedUser ? JSON.parse(storedUser) : null,
+        sessionStorage: sessionUser ? JSON.parse(sessionUser) : null
+      };
+    } catch (error) {
+      console.error('❌ Error verificando estado:', error);
+      return { error: error.message };
+    }
+  };
+
   console.log('💡 Funciones disponibles:');
   console.log('  • clearINEData() - Limpia la base de datos IndexedDB');
   console.log('  • testOCR() - Prueba extracción OCR con texto de ejemplo');
   console.log('  • testOCR("tu texto aquí") - Prueba con texto personalizado');
-  console.log('  • debugAuth("email", "password") - Debug de autenticación');
+  console.log('  • debugAuth("email", "password") - Debug de autenticación (simulado)');
+  console.log('  • testLogin("email", "password") - Prueba login real');
+  console.log('  • checkAuthStatus() - Verifica estado actual de autenticación');
 }
 
 const rootElement = document.getElementById('root');
