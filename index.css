@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+  html.dark {
+    @apply bg-gray-950 text-gray-100;
+  }
+  body {
+    @apply bg-inherit text-inherit min-h-screen;
+  }
+}
+
 /* Custom styles for responsive tables */
 @media (max-width: 767px) {
   .responsive-table thead {
@@ -14,18 +26,26 @@
     margin-bottom: 1.5rem;
     border-radius: 0.75rem;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    border: 1px solid #e5e7eb; /* gray-200 */
+    border: 1px solid #e5e7eb;
     background-color: #ffffff;
     padding: 0.5rem;
+  }
+  .dark .responsive-table tr {
+    border-color: #374151;
+    background-color: #1f2937;
+    box-shadow: none;
   }
   .responsive-table td {
     padding: 1rem 1.5rem;
     text-align: right;
-    border-bottom: 1px solid #f3f4f6; /* gray-100 */
+    border-bottom: 1px solid #f3f4f6;
     min-height: 3rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+  .dark .responsive-table td {
+    border-bottom-color: #374151;
   }
   .responsive-table tr td:last-child {
     border-bottom: none;
@@ -34,10 +54,13 @@
   .responsive-table td:before {
     content: attr(data-label);
     font-weight: 600;
-    color: #374151; /* gray-700 */
+    color: #374151;
     text-align: left;
     flex: 1;
     font-size: 0.875rem;
+  }
+  .dark .responsive-table td:before {
+    color: #d1d5db;
   }
   .responsive-table td[data-label="Acciones"] {
     justify-content: center;

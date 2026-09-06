@@ -1,5 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Tailwind 3.4.0: usar 'class' (no 'selector' — puede no generar dark: en esta versión)
+  darkMode: 'class',
   content: [
     "./index.html",
     "./index.tsx",

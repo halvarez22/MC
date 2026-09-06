@@ -44,9 +44,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ notifications, on
   }
 
   return (
-    <div className="absolute top-full right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-      <div className="p-3 flex justify-between items-center border-b">
-        <h3 className="font-semibold text-gray-800">Notificaciones</h3>
+    <div className="absolute top-full right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] sm:w-96 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="p-3 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+        <h3 className="font-semibold text-gray-800 dark:text-gray-100">Notificaciones</h3>
         {notifications.some(n => !n.read) && (
             <button 
                 onClick={onMarkAllRead}
@@ -60,7 +60,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ notifications, on
         {notifications.length > 0 ? (
           <ul>
             {notifications.map((notification) => (
-              <li key={notification.id} className="border-b last:border-b-0 hover:bg-gray-50">
+              <li key={notification.id} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/80">
                 <a href="#" className="block p-3">
                   <div className="flex items-start space-x-3">
                     {!notification.read && <span className="flex-shrink-0 mt-1.5 h-2 w-2 rounded-full bg-primary" aria-hidden="true"></span>}
@@ -68,8 +68,8 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ notifications, on
                       {getIconForType(notification.type)}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm text-gray-700">{notification.message}</p>
-                      <p className="text-xs text-gray-500 mt-1">{timeSince(notification.timestamp)}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-200">{notification.message}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{timeSince(notification.timestamp)}</p>
                     </div>
                   </div>
                 </a>
@@ -78,7 +78,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ notifications, on
           </ul>
         ) : (
           <div className="text-center py-10 px-4">
-            <p className="text-gray-500">No tienes notificaciones nuevas.</p>
+            <p className="text-gray-500 dark:text-gray-400">No tienes notificaciones nuevas.</p>
           </div>
         )}
       </div>

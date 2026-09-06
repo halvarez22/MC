@@ -3,6 +3,7 @@ import { firebaseService } from '../services/firebaseService';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import ThemeToggle from '../components/ui/ThemeToggle';
 
 interface LoginViewProps {
   onNavigateToRegister: () => void;
@@ -25,23 +26,25 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
 
     if (error) {
       setError(error.message);
-    } 
-    // No se necesita `onLogin`, el listener onAuthStateChanged en App.tsx se encargará
+    }
     setIsLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-light to-primary flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="relative min-h-screen bg-gradient-to-br from-primary-light to-primary dark:from-gray-950 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle tone="onBrand" />
+      </div>
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="mx-auto h-20 w-20 flex items-center justify-center overflow-hidden">
-            <img
-              src="/images/MC Blanco Transparente.png"
-              alt="Logo MC Blanco"
-              width={80}
-              height={80}
-              className="h-20 w-20 max-h-20 max-w-20 object-contain"
-              style={{ width: 80, height: 80, objectFit: 'contain' }}
-            />
+          <img
+            src="/images/MC Blanco Transparente.png"
+            alt="Logo MC Blanco"
+            width={80}
+            height={80}
+            className="h-20 w-20 max-h-20 max-w-20 object-contain"
+            style={{ width: 80, height: 80, objectFit: 'contain' }}
+          />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
           Sistema de Gestión
@@ -52,14 +55,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow-lg sm:rounded-lg sm:px-10">
+        <div className="bg-white dark:bg-gray-900 py-8 px-4 shadow-lg sm:rounded-lg sm:px-10 border border-transparent dark:border-gray-800">
           <form className="space-y-6" onSubmit={handleLogin}>
-            <Input 
-              id="email" 
-              label="Correo Electrónico" 
-              type="text" 
-              autoComplete="username" 
-              required 
+            <Input
+              id="email"
+              label="Correo Electrónico"
+              type="text"
+              autoComplete="username"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -68,7 +71,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
               <Input
                 id="password"
                 label="Contraseña"
-                type={showPassword ? "text" : "password"}
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
                 value={password}
@@ -81,11 +84,11 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
                 tabIndex={-1}
               >
                 {showPassword ? (
-                  <svg className="h-5 w-5 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 text-gray-500 hover:text-gray-700 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
                   </svg>
                 ) : (
-                  <svg className="h-5 w-5 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="h-5 w-5 text-gray-500 hover:text-gray-700 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
@@ -101,38 +104,37 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
               </Button>
             </div>
           </form>
-           <div className="mt-6 text-center space-y-2">
-              <p className="text-sm text-gray-600">
-                ¿Aún no eres afiliado?{' '}
-                <button
-                  type="button"
-                  onClick={onNavigateToRegister}
-                  className="font-medium text-primary hover:text-primary-dark focus:outline-none focus:underline"
-                >
-                  Regístrate aquí
-                </button>
-              </p>
-              <p className="text-xs text-gray-500">
-                <button
-                  type="button"
-                  onClick={() => setShowPrivacyModal(true)}
-                  className="text-primary hover:text-primary-dark underline focus:outline-none"
-                >
-                  Conoce nuestro aviso de privacidad
-                </button>
-              </p>
-            </div>
+          <div className="mt-6 text-center space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              ¿Aún no eres afiliado?{' '}
+              <button
+                type="button"
+                onClick={onNavigateToRegister}
+                className="font-medium text-primary hover:text-primary-dark focus:outline-none focus:underline"
+              >
+                Regístrate aquí
+              </button>
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              <button
+                type="button"
+                onClick={() => setShowPrivacyModal(true)}
+                className="text-primary hover:text-primary-dark underline focus:outline-none"
+              >
+                Conoce nuestro aviso de privacidad
+              </button>
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Modal de Aviso de Privacidad */}
       <Modal
         isOpen={showPrivacyModal}
         onClose={() => setShowPrivacyModal(false)}
         title="PROTECCIÓN Y USO DE DATOS PERSONALES"
       >
         <div className="prose prose-sm max-w-none">
-          <p className="text-gray-700 leading-relaxed">
+          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
             Los datos personales recabados serán protegidos, incorporados y tratados en el Sistema de Datos Personales correspondiente, de conformidad con lo dispuesto por la Ley Federal de Transparencia y Acceso a la Información Pública Gubernamental y demás disposiciones aplicables.
           </p>
         </div>
