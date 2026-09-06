@@ -149,12 +149,34 @@ const notifyListeners = <T>(listeners: Set<Listener<T>>, data: T[]) => {
 export const firebaseService = {
     auth: {
         onAuthStateChanged: (callback: (user: User | null) => void): (() => void) => {
-            setTimeout(() => {
-                const userJson = localStorage.getItem('firebase.auth.user');
-                const user = userJson ? JSON.parse(userJson) : null;
-                callback(user);
-            }, 100);
-            return () => {};
+            // Verificar inmediatamente el estado de autenticación
+            const checkAuthState = () => {
+                try {
+                    const userJson = localStorage.getItem('firebase.auth.user');
+                    const user = userJson ? JSON.parse(userJson) : null;
+                    console.log('🔍 Verificando estado de autenticación:', user ? `Usuario: ${user.email} (${user.role})` : 'No autenticado');
+                    callback(user);
+                } catch (error) {
+                    console.error('❌ Error al verificar estado de autenticación:', error);
+                    callback(null);
+                }
+            };
+
+            // Verificar inmediatamente
+            checkAuthState();
+
+            // También verificar cuando cambie el localStorage
+            const handleStorageChange = (e: StorageEvent) => {
+                if (e.key === 'firebase.auth.user') {
+                    checkAuthState();
+                }
+            };
+
+            window.addEventListener('storage', handleStorageChange);
+
+            return () => {
+                window.removeEventListener('storage', handleStorageChange);
+            };
         },
         signInWithEmailAndPassword: async (email: string, password: string): Promise<{ user: User | null; error: { message: string } | null }> => {
             await new Promise(res => setTimeout(res, 500));

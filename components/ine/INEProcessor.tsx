@@ -1,9 +1,11 @@
-import React, { useState, useRef } from 'react';
-import Tesseract from 'tesseract.js';
+import React, { useState, useRef, useEffect } from 'react';
 import INECapture from './INECapture';
-import { groqService, INEStructuredData } from '../../services/groqService';
-import { savePendingINE } from '../../services/ineOfflineService';
-import { useSyncOffline } from '../../hooks/useSyncOffline';
+import { groqService } from '../../services/groqService';
+import type { INEStructuredData } from '../../types';
+import { savePendingINE, markINEAsProcessed } from '../../services/ineOfflineService';
+import { extractIneDocument } from '../../services/ocrOrchestrator';
+import { isGroqVisionEnabled } from '../../services/featureFlags';
+import { FORCE_INE_SYNC_EVENT } from '../../hooks/useSyncOffline';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 
@@ -12,21 +14,48 @@ interface INEProcessorProps {
   onCancel: () => void;
 }
 
-type ProcessorStep = 'capture' | 'processing' | 'review' | 'error';
+type ProcessorStep = 'capture' | 'processing' | 'ocr_review' | 'ai_processing' | 'review' | 'error';
 
 const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }) => {
   const [currentStep, setCurrentStep] = useState<ProcessorStep>('capture');
   const [images, setImages] = useState<{ frontal: File; posterior: File } | null>(null);
   const [rawText, setRawText] = useState<string>('');
+  const [correctedText, setCorrectedText] = useState<string>('');
   const [structuredData, setStructuredData] = useState<INEStructuredData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState<INEStructuredData | null>(null);
+  /** ID IndexedDB del pending INE — hilo conductor para markINEAsProcessed. */
+  const [pendingIneId, setPendingIneId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Hook para sincronización offline
-  const { isOnline, syncNow } = useSyncOffline();
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const resetINEProcessor = () => {
+    setImages(null);
+    setRawText('');
+    setCorrectedText('');
+    setStructuredData(null);
+    setShowErrorModal(false);
+    setIsEditing(false);
+    setEditedData(null);
+    setPendingIneId(null);
+  };
 
   const handleImagesCaptured = async (capturedImages: { frontal: File; posterior: File }) => {
     setImages(capturedImages);
@@ -36,53 +65,38 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
     setStructuredData(null);
 
     try {
-      console.log('📷 Iniciando procesamiento de INE...');
-
-      // OCR local con Tesseract.js
-      console.log('🔍 Extrayendo texto con Tesseract.js...');
-      const { data: { text } } = await Tesseract.recognize(
-        capturedImages.frontal,
-        'spa', // español
-        {
-          logger: (m) => {
-            if (m.status === 'recognizing text') {
-              console.log(`OCR progreso: ${(m.progress * 100).toFixed(1)}%`);
-            }
-          }
-        }
+      console.log('📷 Iniciando procesamiento de INE (frontal + posterior)...');
+      console.log(
+        `🚩 VITE_USE_GROQ_VISION=${isGroqVisionEnabled() ? 'true' : 'false (legado)'}`
       );
 
-      const cleanText = text.trim();
-      console.log('📝 Texto extraído:', cleanText.substring(0, 100) + '...');
-      setRawText(cleanText);
+      const result = await extractIneDocument({
+        frontal: capturedImages.frontal,
+        posterior: capturedImages.posterior,
+        online: navigator.onLine,
+      });
 
-      // Convertir imagen a base64 para guardar offline
-      const imageData = await fileToBase64(capturedImages.frontal);
+      setRawText(result.rawText);
 
-      // Guardar siempre en IndexedDB (para offline)
-      const savedId = await savePendingINE(cleanText, imageData);
-      console.log(`💾 INE guardado offline con ID: ${savedId}`);
+      const savedId = await savePendingINE(result.rawText, {
+        frontal: result.imageDataFrontal,
+        posterior: result.imageDataPosterior,
+      });
+      setPendingIneId(savedId);
+      console.log(`💾 INE guardado offline con ID: ${savedId} mode=${result.mode}`);
 
-      // Procesar con Groq si hay conexión
-      if (navigator.onLine) {
-        console.log('🌐 Procesando con Groq AI...');
-        try {
-          const structured = await groqService.processINEText(cleanText);
-          console.log('✅ Datos estructurados:', structured);
-          setStructuredData(structured);
-
-          // Marcar como procesado en el hook (esto se hará automáticamente)
-          // El hook se encargará de sincronizar cuando sea necesario
-        } catch (groqError) {
-          console.warn('⚠️ Groq falló, pero el texto crudo está guardado:', groqError);
-          // No es error crítico, el texto crudo ya está guardado
-        }
-      } else {
-        console.log('📱 Modo offline: INE guardado para procesar después');
+      // A′1: Groq Vision one-shot → review estructurado (sin ocr_review online)
+      if (result.mode === 'groq_vision' && result.structured) {
+        setStructuredData(result.structured);
+        await markINEAsProcessed(savedId, result.structured);
+        console.log(`🏷️ INE ${savedId} processed=true (visión one-shot)`);
+        setCurrentStep('review');
+        return;
       }
 
-      setCurrentStep('review');
-
+      // Legado / offline: revisión de texto OCR antes de LLM texto
+      console.log('📱 OCR listo — pendiente confirmación de usuario (path legado/offline)');
+      setCurrentStep('ocr_review');
     } catch (error: any) {
       console.error('❌ Error procesando INE:', error);
       setErrorMessage(error.message || 'Error al procesar las imágenes del INE');
@@ -93,30 +107,14 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
     }
   };
 
-  // Utilidad para convertir File a base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        const result = reader.result as string;
-        // Remover el prefijo "data:image/jpeg;base64,"
-        const base64 = result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = () => reject(reader.error);
-    });
-  };
-
   const handleRetryOCR = async () => {
-    if (!images) return;
+    if (!images || isProcessing) return;
 
     setCurrentStep('processing');
     setIsProcessing(true);
     setShowErrorModal(false);
 
     try {
-      // Reprocesar la imagen con OCR
       await handleImagesCaptured(images);
     } catch (error) {
       console.error('Error retrying OCR:', error);
@@ -126,6 +124,57 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Única llamada LLM intencional en UX online (Opción A)
+  const handleProcessWithAI = async (textToProcess: string) => {
+    if (isProcessing) return;
+
+    setCurrentStep('ai_processing');
+    setIsProcessing(true);
+
+    try {
+      console.log('🤖 Procesando texto corregido con Groq AI...');
+      console.log('📎 pendingIneId para idempotencia:', pendingIneId);
+
+      const structured = await groqService.processINEText(textToProcess);
+      console.log('✅ Datos estructurados:', structured);
+      setStructuredData(structured);
+
+      if (pendingIneId) {
+        await markINEAsProcessed(pendingIneId, structured);
+        console.log(`🏷️ INE ${pendingIneId} marcada processed=true (anti re-Groq en sync)`);
+      } else {
+        console.warn('⚠️ Sin pendingIneId — sync podría re-procesar este texto');
+      }
+
+      setCurrentStep('review');
+
+    } catch (error) {
+      console.warn('⚠️ Error procesando con IA:', error);
+      setStructuredData(null);
+      setCurrentStep('review');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Confirmar texto OCR (usar sin correcciones)
+  const handleConfirmOCRText = () => {
+    setCorrectedText(rawText);
+    handleProcessWithAI(rawText);
+  };
+
+  // Aplicar correcciones y procesar
+  const handleApplyCorrections = () => {
+    const textToProcess = correctedText.trim() || rawText;
+    handleProcessWithAI(textToProcess);
+  };
+
+  // Volver a la revisión OCR
+  const handleBackToOCRReview = () => {
+    setCurrentStep('ocr_review');
+    setStructuredData(null);
   };
 
   const handleAcceptData = () => {
@@ -150,15 +199,37 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
   };
 
   const handleRetryCapture = () => {
+    resetINEProcessor();
     setCurrentStep('capture');
-    setImages(null);
-    setRawText('');
-    setStructuredData(null);
-    setShowErrorModal(false);
   };
 
   const handleSyncNow = () => {
-    syncNow();
+    window.dispatchEvent(new CustomEvent(FORCE_INE_SYNC_EVENT));
+  };
+
+  // Funciones para edición manual
+  const handleStartEditing = () => {
+    setEditedData(structuredData ? { ...structuredData } : null);
+    setIsEditing(true);
+  };
+
+  const handleSaveEditing = () => {
+    if (editedData) {
+      setStructuredData(editedData);
+      setIsEditing(false);
+      console.log('✅ Datos editados guardados:', editedData);
+    }
+  };
+
+  const handleCancelEditing = () => {
+    setEditedData(null);
+    setIsEditing(false);
+  };
+
+  const updateEditedField = (field: keyof INEStructuredData, value: string) => {
+    if (editedData) {
+      setEditedData({ ...editedData, [field]: value });
+    }
   };
 
   const renderProcessing = () => (
@@ -166,21 +237,133 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
       <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
       <div className="text-center">
         <h3 className="text-xl font-semibold text-gray-900 mb-2">
-          Procesando INE con OCR
+          Procesando INE Completo con OCR
         </h3>
         <div className="text-sm text-gray-600 space-y-1">
-          <p>🔍 <strong>Paso 1:</strong> OCR local con Tesseract.js</p>
-          {navigator.onLine ? (
-            <p>🤖 <strong>Paso 2:</strong> Estructuración con Groq AI</p>
-          ) : (
-            <p>📱 <strong>Modo offline:</strong> Solo OCR local</p>
-          )}
+          <p>🔍 <strong>Paso 1:</strong> OCR frontal - Nombre, CURP, Domicilio</p>
+          <p>🔍 <strong>Paso 2:</strong> OCR posterior - Firma, Código QR</p>
+          <p>💾 <strong>Paso 3:</strong> Persistencia offline / enriquecimiento según flag</p>
+          <p className="text-blue-600 font-medium">
+            🎯 <strong>Motor:</strong>{' '}
+            {isGroqVisionEnabled() && isOnline
+              ? 'Groq Vision (proxy /api/groq-ine)'
+              : 'Google Vision / Tesseract (legado)'}
+          </p>
         </div>
         <p className="text-gray-600 mt-3">
-          Extrayendo datos de la credencial de elector...
+          Extrayendo datos de ambas caras de la credencial...
         </p>
         <p className="text-sm text-gray-500 mt-2">
-          Esto puede tomar unos segundos
+          Esto puede tomar más tiempo debido al procesamiento completo
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderOCRReview = () => (
+    <div className="space-y-6">
+      <div className="text-center">
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          📝 Revisar Texto Extraído
+        </h3>
+        <p className="text-gray-600 mb-4">
+          El OCR ha extraído el siguiente texto. Revisa si es correcto y corrige cualquier error antes de procesar con IA.
+        </p>
+      </div>
+
+      {/* Vista previa de imágenes */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md mx-auto">
+        <div className="text-center">
+          <h4 className="font-medium text-gray-900 mb-2">INE Frontal</h4>
+          <img
+            src={URL.createObjectURL(images!.frontal)}
+            alt="INE Frontal"
+            className="w-full h-32 object-cover rounded-lg border"
+          />
+        </div>
+        <div className="text-center">
+          <h4 className="font-medium text-gray-900 mb-2">INE Posterior</h4>
+          <img
+            src={URL.createObjectURL(images!.posterior)}
+            alt="INE Posterior"
+            className="w-full h-32 object-cover rounded-lg border"
+          />
+        </div>
+      </div>
+
+      {/* Texto OCR crudo de ambas caras */}
+      <div className="bg-blue-50 rounded-lg p-4">
+        <h4 className="font-semibold text-blue-900 mb-2">📝 Texto Extraído por OCR (Ambas Caras):</h4>
+        <div className="bg-white rounded border p-2 mb-2">
+          <div className="text-xs text-gray-500 mb-1">💡 Información típica por cara:</div>
+          <div className="text-xs text-gray-600 grid grid-cols-2 gap-2">
+            <div><strong>Frontal:</strong> Nombre, CURP, Domicilio</div>
+            <div><strong>Posterior:</strong> Firma, Código QR, Huella</div>
+          </div>
+        </div>
+        <textarea
+          value={correctedText || rawText}
+          onChange={(e) => setCorrectedText(e.target.value)}
+          className="w-full h-40 p-3 border border-gray-300 rounded-md font-mono text-sm resize-vertical"
+          placeholder="El texto OCR de ambas caras aparecerá aquí..."
+        />
+        <p className="text-xs text-blue-700 mt-2">
+          💡 <strong>Tip:</strong> Corrige errores de OCR aquí antes de enviar a IA. Se procesaron ambas caras del INE para máxima precisión.
+        </p>
+      </div>
+
+      {/* Información sobre el siguiente paso */}
+      <div className="bg-green-50 rounded-lg p-4">
+        <h4 className="font-semibold text-green-900 mb-2">🤖 Próximo Paso: Procesamiento con IA</h4>
+        <p className="text-green-800 text-sm">
+          Una vez que confirmes el texto, la IA analizará el contenido para extraer datos estructurados como nombre, CURP, dirección, etc.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3 justify-center">
+        <Button onClick={handleRetryCapture} variant="secondary" disabled={isProcessing}>
+          ↻ Volver a capturar
+        </Button>
+        <Button onClick={handleRetryOCR} variant="secondary" disabled={isProcessing} isLoading={isProcessing}>
+          🔄 Reprocesar OCR
+        </Button>
+        <Button
+          onClick={handleConfirmOCRText}
+          className="bg-blue-600 hover:bg-blue-700"
+          disabled={isProcessing}
+          isLoading={isProcessing}
+        >
+          ✅ Usar texto tal cual
+        </Button>
+        <Button
+          onClick={handleApplyCorrections}
+          className="bg-green-600 hover:bg-green-700"
+          disabled={isProcessing}
+          isLoading={isProcessing}
+        >
+          🚀 Aplicar correcciones y procesar
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderAIProcessing = () => (
+    <div className="flex flex-col items-center justify-center min-h-[400px] space-y-6">
+      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+      <div className="text-center">
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          🤖 Procesando con Inteligencia Artificial
+        </h3>
+        <div className="text-sm text-gray-600 space-y-1">
+          <p>📄 <strong>Texto procesado:</strong> Información de ambas caras del INE</p>
+          <p>🧠 <strong>Análisis inteligente:</strong> Extrayendo datos estructurados</p>
+          <p>📊 <strong>Validación automática:</strong> Verificando formatos y consistencia</p>
+        </div>
+        <p className="text-gray-600 mt-3">
+          Analizando el texto completo corregido para identificar nombre, CURP, dirección, sección, etc.
+        </p>
+        <p className="text-sm text-gray-500 mt-2">
+          El procesamiento de ambas caras mejora significativamente la precisión
         </p>
       </div>
     </div>
@@ -196,8 +379,8 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
             ✅ Procesamiento Completado
           </h3>
           <div className="flex items-center justify-center gap-4 text-sm">
-            <span className={`px-2 py-1 rounded-full text-xs ${navigator.onLine ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-              {navigator.onLine ? '🌐 Online' : '📱 Offline'}
+            <span className={`px-2 py-1 rounded-full text-xs ${isOnline ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+              {isOnline ? '🌐 Online' : '📱 Offline'}
             </span>
             <button
               onClick={handleSyncNow}
@@ -228,11 +411,14 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
           </div>
         </div>
 
-        {/* Texto crudo extraído */}
+        {/* Texto crudo extraído de ambas caras */}
         {rawText && (
           <div className="bg-blue-50 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-900 mb-2">📝 Texto Extraído (OCR):</h4>
-            <pre className="text-sm text-blue-800 whitespace-pre-wrap max-h-32 overflow-y-auto bg-white p-2 rounded border">
+            <h4 className="font-semibold text-blue-900 mb-2">📝 Texto Extraído (OCR Completo - Ambas Caras):</h4>
+            <div className="bg-white rounded border p-2 mb-2">
+              <div className="text-xs text-gray-500">✅ Procesamiento completo del INE realizado</div>
+            </div>
+            <pre className="text-sm text-blue-800 whitespace-pre-wrap max-h-40 overflow-y-auto bg-white p-2 rounded border">
               {rawText}
             </pre>
           </div>
@@ -241,63 +427,123 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
         {/* Datos estructurados (solo si existen) */}
         {data && (
           <div className="bg-green-50 rounded-lg p-6 space-y-4">
-            <h4 className="font-semibold text-green-900 mb-4">🤖 Datos Estructurados (Groq AI):</h4>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-semibold text-green-900">🤖 Datos Estructurados con Validación:</h4>
+              <div className="text-sm">
+                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                  🛡️ Validado automáticamente
+                </span>
+              </div>
+            </div>
+
+            {/* Advertencia sobre revisión humana */}
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700">
+                    <strong>⚠️ Revisión requerida:</strong> Verifica que los datos sean correctos antes de continuar.
+                    Campos con baja confianza (&lt; 60%) necesitan edición manual.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <label className="font-medium text-gray-700">Nombre completo:</label>
-                <p className="text-gray-900 mt-1">{data.nombre_completo || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Nombre completo"
+                value={isEditing && editedData ? editedData.nombre_completo : data.nombre_completo}
+                confidence={data.nombre_completo && data.nombre_completo !== 'No se pudo extraer nombre' ? 90 : 20}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('nombre_completo', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">CURP:</label>
-                <p className="text-gray-900 mt-1 font-mono">{data.curp || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="CURP"
+                value={isEditing && editedData ? editedData.curp : data.curp}
+                confidence={data.curp && data.curp !== 'No se pudo extraer CURP' ? 95 : 10}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('curp', value)}
+                isMonospace={true}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Clave de Elector:</label>
-                <p className="text-gray-900 mt-1 font-mono">{data.clave_elector || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Clave de Elector"
+                value={isEditing && editedData ? editedData.clave_elector : data.clave_elector}
+                confidence={data.clave_elector && data.clave_elector !== 'No se pudo extraer clave' ? 85 : 15}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('clave_elector', value)}
+                isMonospace={true}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Fecha de nacimiento:</label>
-                <p className="text-gray-900 mt-1">{data.fecha_nacimiento || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Fecha de nacimiento"
+                value={isEditing && editedData ? editedData.fecha_nacimiento : data.fecha_nacimiento}
+                confidence={data.fecha_nacimiento && data.fecha_nacimiento !== 'No se pudo extraer fecha nacimiento' ? 80 : 25}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('fecha_nacimiento', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Estado:</label>
-                <p className="text-gray-900 mt-1">{data.estado || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Estado"
+                value={isEditing && editedData ? editedData.estado : data.estado}
+                confidence={data.estado && data.estado !== 'No se pudo extraer estado' ? 85 : 20}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('estado', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Municipio:</label>
-                <p className="text-gray-900 mt-1">{data.municipio || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Municipio"
+                value={isEditing && editedData ? editedData.municipio : data.municipio}
+                confidence={data.municipio && data.municipio !== 'No se pudo extraer municipio' ? 80 : 20}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('municipio', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Sección:</label>
-                <p className="text-gray-900 mt-1">{data.seccion || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Sección"
+                value={isEditing && editedData ? editedData.seccion : data.seccion}
+                confidence={data.seccion && data.seccion !== 'No se pudo extraer sección' ? 90 : 15}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('seccion', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Localidad:</label>
-                <p className="text-gray-900 mt-1">{data.localidad || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Localidad"
+                value={isEditing && editedData ? editedData.localidad : data.localidad}
+                confidence={data.localidad && data.localidad !== 'No se pudo extraer localidad' ? 75 : 20}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('localidad', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Fecha de emisión:</label>
-                <p className="text-gray-900 mt-1">{data.fecha_emision || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Fecha de emisión"
+                value={isEditing && editedData ? editedData.fecha_emision : data.fecha_emision}
+                confidence={data.fecha_emision && data.fecha_emision !== 'No se pudo extraer fecha emisión' ? 70 : 30}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('fecha_emision', value)}
+              />
 
-              <div>
-                <label className="font-medium text-gray-700">Fecha de vigencia:</label>
-                <p className="text-gray-900 mt-1">{data.fecha_vigencia || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Fecha de vigencia"
+                value={isEditing && editedData ? editedData.fecha_vigencia : data.fecha_vigencia}
+                confidence={data.fecha_vigencia && data.fecha_vigencia !== 'No se pudo extraer fecha vigencia' ? 70 : 30}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('fecha_vigencia', value)}
+              />
 
-              <div className="md:col-span-2">
-                <label className="font-medium text-gray-700">Domicilio:</label>
-                <p className="text-gray-900 mt-1">{data.domicilio || 'No disponible'}</p>
-              </div>
+              <EditableDataField
+                label="Domicilio"
+                value={isEditing && editedData ? editedData.domicilio : data.domicilio}
+                confidence={data.domicilio && data.domicilio !== 'No se pudo extraer domicilio' ? 60 : 40}
+                isEditing={isEditing}
+                onChange={(value) => updateEditedField('domicilio', value)}
+                isFullWidth={true}
+              />
             </div>
           </div>
         )}
@@ -312,16 +558,39 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
           </div>
         )}
 
+        <div className="bg-gray-50 rounded-lg p-4 mb-4">
+          <p className="text-sm text-gray-600 mb-3">
+            💡 <strong>¿Los datos no son correctos?</strong> Puedes editar manualmente los campos o volver a capturar la imagen.
+          </p>
+        </div>
+
         <div className="flex flex-wrap gap-3 justify-center">
-          <Button onClick={handleRetryCapture} variant="secondary">
+          <Button onClick={handleRetryCapture} variant="secondary" disabled={isProcessing}>
             ↻ Volver a capturar
           </Button>
-          <Button onClick={handleRetryOCR} variant="secondary">
+          <Button onClick={handleRetryOCR} variant="secondary" disabled={isProcessing}>
             🔄 Reprocesar OCR
           </Button>
-          <Button onClick={handleAcceptData}>
-            ✅ Usar estos datos
-          </Button>
+
+          {isEditing ? (
+            <>
+              <Button onClick={handleSaveEditing} className="bg-green-600 hover:bg-green-700" disabled={isProcessing}>
+                💾 Guardar cambios
+              </Button>
+              <Button onClick={handleCancelEditing} variant="outline" disabled={isProcessing}>
+                ❌ Cancelar edición
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={handleStartEditing} variant="outline" disabled={isProcessing}>
+                ✏️ Editar datos
+              </Button>
+              <Button onClick={handleAcceptData} className="bg-green-600 hover:bg-green-700" disabled={isProcessing}>
+                ✅ Confirmar y continuar
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -371,10 +640,109 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
 
       {currentStep === 'processing' && renderProcessing()}
 
+      {currentStep === 'ocr_review' && renderOCRReview()}
+
+      {currentStep === 'ai_processing' && renderAIProcessing()}
+
       {currentStep === 'review' && renderReview()}
 
       {renderErrorModal()}
     </>
+  );
+};
+
+// Componente para mostrar campos de datos con indicadores de confianza
+interface DataFieldProps {
+  label: string;
+  value: string;
+  confidence: number;
+  isMonospace?: boolean;
+  isFullWidth?: boolean;
+}
+
+const DataField: React.FC<DataFieldProps> = ({ label, value, confidence, isMonospace = false, isFullWidth = false }) => {
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 80) return 'text-green-600 bg-green-100';
+    if (confidence >= 60) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
+
+  const getConfidenceIcon = (confidence: number) => {
+    if (confidence >= 80) return '✅';
+    if (confidence >= 60) return '⚠️';
+    return '❌';
+  };
+
+  return (
+    <div className={isFullWidth ? 'md:col-span-2' : ''}>
+      <div className="flex items-center justify-between mb-1">
+        <label className="font-medium text-gray-700">{label}:</label>
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getConfidenceColor(confidence)}`}>
+          {getConfidenceIcon(confidence)} {confidence}%
+        </span>
+      </div>
+      <p className={`text-gray-900 mt-1 ${isMonospace ? 'font-mono' : ''} ${!value || value.startsWith('No se pudo') ? 'text-gray-500 italic' : ''}`}>
+        {value || 'No disponible'}
+      </p>
+    </div>
+  );
+};
+
+// Componente editable para campos de datos
+interface EditableDataFieldProps {
+  label: string;
+  value: string;
+  confidence: number;
+  isEditing: boolean;
+  onChange: (value: string) => void;
+  isMonospace?: boolean;
+  isFullWidth?: boolean;
+}
+
+const EditableDataField: React.FC<EditableDataFieldProps> = ({
+  label,
+  value,
+  confidence,
+  isEditing,
+  onChange,
+  isMonospace = false,
+  isFullWidth = false
+}) => {
+  const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 80) return 'text-green-600 bg-green-100';
+    if (confidence >= 60) return 'text-yellow-600 bg-yellow-100';
+    return 'text-red-600 bg-red-100';
+  };
+
+  const getConfidenceIcon = (confidence: number) => {
+    if (confidence >= 80) return '✅';
+    if (confidence >= 60) return '⚠️';
+    return '❌';
+  };
+
+  return (
+    <div className={isFullWidth ? 'md:col-span-2' : ''}>
+      <div className="flex items-center justify-between mb-1">
+        <label className="font-medium text-gray-700">{label}:</label>
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getConfidenceColor(confidence)}`}>
+          {getConfidenceIcon(confidence)} {confidence}%
+        </span>
+      </div>
+
+      {isEditing ? (
+        <input
+          type="text"
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isMonospace ? 'font-mono' : ''}`}
+          placeholder={`Ingresa ${label.toLowerCase()}`}
+        />
+      ) : (
+        <p className={`text-gray-900 mt-1 ${isMonospace ? 'font-mono' : ''} ${!value || value.startsWith('No se pudo') ? 'text-gray-500 italic' : ''}`}>
+          {value || 'No disponible'}
+        </p>
+      )}
+    </div>
   );
 };
 

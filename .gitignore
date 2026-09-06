@@ -12,6 +12,20 @@ dist
 dist-ssr
 *.local
 
+# Spike fixtures con PII (INE)
+fixtures/*
+!fixtures/README.md
+!fixtures/manifest.example.json
+
+# Secretos / credenciales locales (nunca subir)
+ApiKey*
+*api*key*.txt
+usuarios demo*.txt
+.env
+.env.*
+!.env.production
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

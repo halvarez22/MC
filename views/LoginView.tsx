@@ -33,11 +33,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-light to-primary flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="mx-auto h-20 w-20 flex items-center justify-center">
+        <div className="mx-auto h-20 w-20 flex items-center justify-center overflow-hidden">
             <img
               src="/images/MC Blanco Transparente.png"
               alt="Logo MC Blanco"
-              className="w-full h-full object-contain"
+              width={80}
+              height={80}
+              className="h-20 w-20 max-h-20 max-w-20 object-contain"
+              style={{ width: 80, height: 80, objectFit: 'contain' }}
             />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-white">

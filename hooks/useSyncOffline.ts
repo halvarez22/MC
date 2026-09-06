@@ -1,7 +1,9 @@
 // Hook para sincronización automática de INEs offline
 // Procesa INEs pendientes cuando hay conexión a internet
+// ÚNICO mount de producto: App.tsx (no montar en INEProcessor)
+// Idempotencia: mutex global de sync + Set de ids in-flight (Regla 6)
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import {
   getUnprocessedInes,
   markINEAsProcessed,
@@ -9,53 +11,61 @@ import {
   repairCorruptedInes
 } from '../services/ineOfflineService';
 import { groqService } from '../services/groqService';
+import { groqVisionService } from '../services/groqVisionService';
+import { isGroqVisionEnabled } from '../services/featureFlags';
 
-interface SyncStatus {
-  isOnline: boolean;
-  pendingCount: number;
-  processedCount: number;
-  lastSync?: Date;
-  error?: string;
-}
+/** Evento para forzar sync desde UI desacoplada (p. ej. botón en INEProcessor). */
+export const FORCE_INE_SYNC_EVENT = 'forceINESync';
 
 export const useSyncOffline = () => {
-  // Función para enviar datos al backend (adaptar según tu API)
-  const sendToBackend = useCallback(async (structuredData: any): Promise<boolean> => {
+  const syncingRef = useRef(false);
+  const inFlightIdsRef = useRef<Set<string>>(new Set());
+
+  const sendToBackend = useCallback(async (structuredData: unknown): Promise<boolean> => {
     try {
-      // Aquí puedes integrar con tu servicio de Firebase o API
-      // Por ahora solo simulamos el envío
       console.log('Enviando al backend:', structuredData);
-
-      // Simular delay de red
       await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Aquí iría tu llamada real al backend
-      // const response = await fetch('/api/submit-ine', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(structuredData)
-      // });
-      // return response.ok;
-
-      return true; // Simular éxito
+      return true;
     } catch (error) {
       console.error('Error enviando al backend:', error);
       return false;
     }
   }, []);
 
-  // Procesar una INE individual
-  const processSingleINE = useCallback(async (ine: any) => {
+  const processSingleINE = useCallback(async (ine: {
+    id: string;
+    rawText: string;
+    imageData?: string;
+    imageDataFrontal?: string | null;
+    imageDataPosterior?: string | null;
+  }) => {
+    if (inFlightIdsRef.current.has(ine.id)) {
+      console.log(`⏭️ INE ${ine.id} ya en vuelo — skip`);
+      return false;
+    }
+
+    inFlightIdsRef.current.add(ine.id);
     try {
       console.log(`Procesando INE ${ine.id}...`);
 
-      // Procesar con Groq
-      const structuredData = await groqService.processINEText(ine.rawText);
+      let structuredData: unknown;
 
-      // Marcar como procesada en local
+      const frontal = ine.imageDataFrontal || ine.imageData;
+      const posterior = ine.imageDataPosterior;
+
+      // Flag ON + imágenes → visión vía proxy; else texto LLM legado
+      if (isGroqVisionEnabled() && frontal) {
+        console.log(`🚀 Sync visión proxy para ${ine.id}`);
+        structuredData = await groqVisionService.extractIneFromBase64(
+          frontal,
+          posterior
+        );
+      } else {
+        structuredData = await groqService.processINEText(ine.rawText);
+      }
+
       await markINEAsProcessed(ine.id, structuredData);
 
-      // Enviar al backend si hay conexión
       if (navigator.onLine) {
         const success = await sendToBackend(structuredData);
         if (success) {
@@ -69,20 +79,26 @@ export const useSyncOffline = () => {
     } catch (error) {
       console.error(`❌ Error procesando INE ${ine.id}:`, error);
       return false;
+    } finally {
+      inFlightIdsRef.current.delete(ine.id);
     }
   }, [sendToBackend]);
 
-  // Sincronizar todas las INEs pendientes
   const syncPendingInes = useCallback(async () => {
     if (!navigator.onLine) {
       console.log('🔌 Sin conexión, saltando sincronización');
       return;
     }
 
+    if (syncingRef.current) {
+      console.log('⏭️ Sync ya en curso — skip (mutex)');
+      return;
+    }
+
+    syncingRef.current = true;
     try {
       console.log('🔄 Iniciando sincronización de INEs offline...');
 
-      // Primero, intentar reparar registros corruptos
       try {
         await repairCorruptedInes();
         console.log('🔧 Registros corruptos reparados');
@@ -98,27 +114,24 @@ export const useSyncOffline = () => {
         return;
       }
 
-      // Verificar que Groq esté disponible
       const groqAvailable = await groqService.isAvailable();
       if (!groqAvailable) {
         console.warn('⚠️ Groq no disponible, esperando próxima sincronización');
         return;
       }
 
-      // Procesar INEs en lotes para no sobrecargar
       const batchSize = 3;
       let processed = 0;
 
       for (let i = 0; i < unprocessedInes.length; i += batchSize) {
         const batch = unprocessedInes.slice(i, i + batchSize);
-        console.log(`Procesando lote ${Math.floor(i/batchSize) + 1}/${Math.ceil(unprocessedInes.length/batchSize)}`);
+        console.log(`Procesando lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(unprocessedInes.length / batchSize)}`);
 
         const promises = batch.map(processSingleINE);
         const results = await Promise.allSettled(promises);
 
         processed += results.filter(result => result.status === 'fulfilled' && result.value).length;
 
-        // Pequeño delay entre lotes
         if (i + batchSize < unprocessedInes.length) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -129,38 +142,49 @@ export const useSyncOffline = () => {
 
     } catch (error) {
       console.error('❌ Error en sincronización:', error);
+    } finally {
+      syncingRef.current = false;
     }
   }, [processSingleINE]);
 
-  // Configurar sincronización automática
   useEffect(() => {
-    // Sincronizar al montar el componente
-    syncPendingInes();
+    // NOTA (HRU / Cero Regresiones): se eliminó cleanupOldData + clearAllInes automático.
 
-    // Sincronizar cuando se recupera la conexión
+    const initialSyncTimeout = setTimeout(() => {
+      console.log('🔄 Sincronización inicial de INEs (con delay)...');
+      syncPendingInes();
+    }, 3000);
+
     const handleOnline = () => {
       console.log('🌐 Conexión recuperada, iniciando sincronización...');
+      setTimeout(() => syncPendingInes(), 1000);
+    };
+
+    const handleForceSync = () => {
+      console.log('📡 forceINESync recibido — iniciando sincronización...');
       syncPendingInes();
     };
 
     window.addEventListener('online', handleOnline);
+    window.addEventListener(FORCE_INE_SYNC_EVENT, handleForceSync);
 
-    // Sincronizar periódicamente (cada 5 minutos) si hay conexión
     const intervalId = setInterval(() => {
       if (navigator.onLine) {
+        console.log('⏰ Sincronización periódica automática...');
         syncPendingInes();
       }
-    }, 5 * 60 * 1000); // 5 minutos
+    }, 10 * 60 * 1000);
 
     return () => {
+      clearTimeout(initialSyncTimeout);
       window.removeEventListener('online', handleOnline);
+      window.removeEventListener(FORCE_INE_SYNC_EVENT, handleForceSync);
       clearInterval(intervalId);
     };
   }, [syncPendingInes]);
 
-  // Retornar estado y funciones útiles
   return {
     syncNow: syncPendingInes,
-    isOnline: navigator.onLine,
+    isOnline: typeof navigator !== 'undefined' ? navigator.onLine : false,
   };
 };

@@ -34,6 +34,21 @@ export interface INEData {
   confidence?: number; // Nivel de confianza del OCR
 }
 
+/** Contrato canónico de extracción estructurada INE (salida LLM/OCR pipeline). */
+export interface INEStructuredData {
+  nombre_completo?: string;
+  curp?: string;
+  fecha_nacimiento?: string;
+  fecha_emision?: string;
+  fecha_vigencia?: string;
+  domicilio?: string;
+  clave_elector?: string;
+  seccion?: string;
+  municipio?: string;
+  estado?: string;
+  localidad?: string;
+}
+
 export interface Affiliate {
   id: string;
   createdAt: string;

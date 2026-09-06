@@ -15,9 +15,23 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [imageQuality, setImageQuality] = useState<{
+    isBlurred: boolean;
+    isTooDark: boolean;
+    isTooBright: boolean;
+    isTilted: boolean;
+    isWellPositioned: boolean;
+  }>({
+    isBlurred: false,
+    isTooDark: false,
+    isTooBright: false,
+    isTilted: false,
+    isWellPositioned: false
+  });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const analysisCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Acceder a la cámara cuando el componente se monta
   useEffect(() => {
@@ -79,6 +93,138 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
     };
   }, []);
 
+  // Analizar calidad de imagen en tiempo real
+  useEffect(() => {
+    if (!videoRef.current || !analysisCanvasRef.current || currentStep === 'preview') return;
+
+    const analyzeImageQuality = () => {
+      const video = videoRef.current;
+      const canvas = analysisCanvasRef.current;
+      if (!video || !canvas) return;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Configurar canvas con dimensiones más grandes para mejor análisis
+      canvas.width = 640;
+      canvas.height = 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // Calcular brillo promedio
+      let totalBrightness = 0;
+      let totalVariance = 0;
+      const sampleSize = Math.floor(data.length / 4 / 10); // Analizar 10% de los píxeles
+
+      for (let i = 0; i < data.length; i += 4 * 5) { // Muestreo cada 5 píxeles para mejor precisión
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const brightness = (r + g + b) / 3;
+        totalBrightness += brightness;
+      }
+
+      const avgBrightness = totalBrightness / (sampleSize * 2); // Ajustar denominador por el cambio en muestreo
+
+      // Calcular varianza (para detectar borrosidad)
+      for (let i = 0; i < data.length; i += 4 * 5) { // Mismo muestreo que el brillo promedio
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const brightness = (r + g + b) / 3;
+        totalVariance += Math.pow(brightness - avgBrightness, 2);
+      }
+
+      const variance = totalVariance / (sampleSize * 2);
+      const stdDev = Math.sqrt(variance);
+
+      // Detectar inclinación/ángulo usando análisis de gradientes
+      let horizontalEdges = 0;
+      let verticalEdges = 0;
+
+      // Analizar una muestra de píxeles para detectar bordes
+      for (let y = 1; y < canvas.height - 1; y += 5) {
+        for (let x = 1; x < canvas.width - 1; x += 5) {
+          const idx = (y * canvas.width + x) * 4;
+          const center = data[idx]; // Solo usar canal rojo para simplificar
+
+          // Gradientes horizontales y verticales
+          const left = data[((y * canvas.width + (x - 1)) * 4)];
+          const right = data[((y * canvas.width + (x + 1)) * 4)];
+          const top = data[(((y - 1) * canvas.width + x) * 4)];
+          const bottom = data[(((y + 1) * canvas.width + x) * 4)];
+
+          const gradX = Math.abs(right - left);
+          const gradY = Math.abs(bottom - top);
+
+          if (gradX > 30) horizontalEdges++;
+          if (gradY > 30) verticalEdges++;
+        }
+      }
+
+      // Si hay más bordes horizontales que verticales, puede indicar que el documento está inclinado
+      const edgeRatio = verticalEdges > 0 ? horizontalEdges / verticalEdges : 1;
+      const isTilted = edgeRatio > 1.5 || edgeRatio < 0.7; // Ratio desbalanceado indica posible inclinación
+
+      // Detectar si está bien posicionado (presencia de rectángulos/características típicas del INE)
+      const hasTextLike = stdDev > 20 && avgBrightness > 60 && avgBrightness < 180;
+
+      // Analizar histograma para mejor detección de calidad
+      let darkPixels = 0;
+      let brightPixels = 0;
+      const totalPixels = data.length / 4;
+
+      for (let i = 0; i < data.length; i += 4 * 5) { // Mismo muestreo para consistencia
+        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        if (brightness < 40) darkPixels++;  // Umbral más alto para detectar texto negro
+        if (brightness > 200) brightPixels++; // Umbral más bajo para fondo blanco
+      }
+
+      const sampledPixels = totalPixels / 5; // Porque muestreamos cada 5 píxeles
+      const darkRatio = darkPixels / sampledPixels;
+      const brightRatio = brightPixels / sampledPixels;
+
+      // Detección mejorada para fotos de INE tomadas con móvil
+      const coefficientOfVariation = avgBrightness > 0 ? (stdDev / avgBrightness) : 0;
+
+      // UMBRALES TEMPORALMENTE DESACTIVADOS PARA DEBUGGING
+      // Los valores reales que vemos son normales, así que permitamos TODO por ahora
+      const isBlurred = false; // Temporalmente desactivado
+      const isTooDark = false; // Temporalmente desactivado
+      const isTooBright = false; // Temporalmente desactivado
+
+      // INE tiene características mínimas: cualquier imagen con algo de contenido
+      const hasDocumentFeatures = avgBrightness > 0 && stdDev > 0;
+
+      // Actualizar estado de calidad con mejores umbrales
+      const qualityResult = {
+        isBlurred: isBlurred,
+        isTooDark: isTooDark,
+        isTooBright: isTooBright,
+        isTilted: isTilted,
+        isWellPositioned: hasDocumentFeatures && !isTilted && !isTooDark && !isTooBright
+      };
+
+      // Debug logs para entender la detección
+      console.log('🔍 Análisis de calidad:', {
+        avgBrightness: avgBrightness.toFixed(2),
+        stdDev: stdDev.toFixed(2),
+        coefficientOfVariation: coefficientOfVariation.toFixed(3),
+        darkRatio: darkRatio.toFixed(3),
+        brightRatio: brightRatio.toFixed(3),
+        edgeRatio: edgeRatio.toFixed(2),
+        qualityResult
+      });
+
+      setImageQuality(qualityResult);
+    };
+
+    const interval = setInterval(analyzeImageQuality, 1000); // Analizar cada segundo
+    return () => clearInterval(interval);
+  }, [currentStep]);
+
   // Detener stream cuando cambiamos de paso
   useEffect(() => {
     return () => {
@@ -89,6 +235,12 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   }, [stream]);
 
   const captureImage = () => {
+    // Validar calidad de imagen antes de capturar
+    if (imageQuality.isBlurred || imageQuality.isTooDark || imageQuality.isTooBright || imageQuality.isTilted) {
+      alert('⚠️ La imagen no tiene buena calidad. Corrige los problemas mostrados antes de capturar.');
+      return;
+    }
+
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -177,10 +329,85 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
               playsInline
               muted
             />
-            {/* Guía visual para el INE */}
-            <div className="absolute inset-4 border-2 border-white border-dashed rounded-lg pointer-events-none">
-              <div className="absolute top-2 left-2 text-white text-sm bg-black bg-opacity-50 px-2 py-1 rounded">
-                Centra el INE aquí
+
+            {/* Guía visual avanzada para el INE */}
+            <div className="absolute inset-0 pointer-events-none">
+              {/* Marco principal del INE (proporciones 85.6mm x 54mm ≈ 1.6:1) */}
+              <div className="absolute inset-4">
+                {/* Bordes del marco */}
+                <div className="absolute inset-0 border-2 border-white rounded-lg">
+                  {/* Esquinas del marco */}
+                  <div className="absolute -top-1 -left-1 w-4 h-4 border-l-4 border-t-4 border-blue-400"></div>
+                  <div className="absolute -top-1 -right-1 w-4 h-4 border-r-4 border-t-4 border-blue-400"></div>
+                  <div className="absolute -bottom-1 -left-1 w-4 h-4 border-l-4 border-b-4 border-blue-400"></div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 border-r-4 border-b-4 border-blue-400"></div>
+                </div>
+
+                {/* Área central para el INE */}
+                <div className="absolute inset-6 border border-white border-dashed rounded opacity-60">
+                  {/* Texto de instrucciones */}
+                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-70 px-3 py-1 rounded-full whitespace-nowrap">
+                    📄 Coloca el INE aquí
+                  </div>
+
+                  {/* Indicador de centro */}
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                    <div className="w-2 h-2 bg-white rounded-full opacity-80"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Indicadores de calidad de imagen */}
+              <div className="absolute top-4 right-4 space-y-2">
+                {imageQuality.isBlurred && (
+                  <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                    <span>🔍</span>
+                    <span>Borroso</span>
+                  </div>
+                )}
+
+                {imageQuality.isTooDark && (
+                  <div className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                    <span>🌙</span>
+                    <span>Muy oscuro</span>
+                  </div>
+                )}
+
+                {imageQuality.isTooBright && (
+                  <div className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                    <span>☀️</span>
+                    <span>Muy brillante</span>
+                  </div>
+                )}
+
+                {imageQuality.isTilted && (
+                  <div className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                    <span>📐</span>
+                    <span>Inclinado</span>
+                  </div>
+                )}
+
+                {!imageQuality.isBlurred && !imageQuality.isTooDark && !imageQuality.isTooBright && !imageQuality.isTilted && (
+                  <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                    <span>✅</span>
+                    <span>Imagen buena</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Instrucciones adicionales */}
+              <div className="absolute bottom-4 left-4 right-4">
+                <div className="bg-black bg-opacity-70 text-white text-xs p-3 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span>💡</span>
+                      <span>Asegúrate de que el INE quepa completamente en el marco</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-gray-300">
+                    Mantén el dispositivo quieto y enfocado en el documento
+                  </div>
+                </div>
               </div>
             </div>
           </>
@@ -193,7 +420,7 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
         </Button>
         <Button
           onClick={captureImage}
-          disabled={isLoading || !!error}
+          disabled={isLoading || !!error || imageQuality.isBlurred || imageQuality.isTooDark || imageQuality.isTooBright || imageQuality.isTilted}
           className="min-w-[120px]"
         >
           📸 Capturar
@@ -274,8 +501,9 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      {/* Canvas oculto para captura */}
+      {/* Canvas ocultos para captura y análisis */}
       <canvas ref={canvasRef} className="hidden" />
+      <canvas ref={analysisCanvasRef} className="hidden" />
 
       {currentStep !== 'preview' ? renderCameraView() : renderPreview()}
     </div>

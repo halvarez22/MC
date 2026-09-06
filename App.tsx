@@ -28,73 +28,60 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = firebaseService.auth.onAuthStateChanged(currentUser => {
+      console.log('🔐 Estado de autenticación cambiado:', currentUser);
       setUser(currentUser);
-      if (currentUser && currentUser.role === 'admin') {
-        setCurrentView('dashboard');
+      if (currentUser) {
+        if (currentUser.role === 'admin') {
+          setCurrentView('dashboard');
+        } else if (currentUser.role === 'brigadista') {
+          // Los brigadistas van directo al modo campo (afiliaciones)
+          console.log('👷 Brigadista autenticado, redirigiendo a modo campo');
+        }
       }
       setLoading(false);
     });
 
     const handleAuthChange = () => {
-        const userJson = sessionStorage.getItem('firebase.auth.user');
+        const userJson = localStorage.getItem('firebase.auth.user');
         const updatedUser = userJson ? JSON.parse(userJson) : null;
         setUser(updatedUser);
         if (updatedUser && updatedUser.role === 'admin') {
             setCurrentView('dashboard');
         }
+        if (updatedUser && updatedUser.role === 'brigadista') {
+            setCurrentView('dashboard'); // Los brigadistas van directo a afiliaciones
+        }
     }
     window.addEventListener('authChanged', handleAuthChange);
-    
-    // --- Lógica de Sincronización Offline ---
-    const handleSync = async () => {
-        console.log("Intentando sincronizar registros offline...");
-        try {
-            const pending = await offlineService.getPendingRegistrations();
-            if (pending.length > 0) {
-                console.log(`Sincronizando ${pending.length} registros.`);
-                for (const reg of pending) {
-                    // Mapea los documentos para que coincidan con la firma de la API
-                    const documentsForApi = reg.documents.map(({ type, fileName }) => ({ type, fileName }));
-                    
-                    await firebaseService.registerAffiliate(reg.formData, documentsForApi, reg.geolocation);
-                    await offlineService.deleteRegistration(reg.id);
-                    console.log(`Registro ${reg.id} sincronizado y eliminado de la cola.`);
-                }
-                alert(`${pending.length} afiliado(s) guardado(s) localmente han sido sincronizados con éxito.`);
-                // Forzar actualización del indicador de pendientes
-                window.dispatchEvent(new CustomEvent('forceOfflineIndicatorUpdate'));
-            } else {
-                 console.log("No hay registros pendientes para sincronizar.");
-            }
-        } catch (error) {
-            console.error("Error durante la sincronización:", error);
-            alert("Ocurrió un error al intentar sincronizar los datos. Por favor, revisa la consola.");
-        }
-    };
 
-    const handleOnline = () => {
-      console.log('Conexión recuperada. Iniciando sincronización.');
-      handleSync();
-    };
-
-    window.addEventListener('online', handleOnline);
-
-    // Sincronización inicial al cargar si hay conexión
-    if (navigator.onLine) {
-      handleSync();
-    }
+    // SINCRONIZACIÓN SIMPLIFICADA - EL HOOK useSyncOffline SE ENCARGARÁ
+    console.log("📱 Sincronización delegada al hook useSyncOffline");
 
     return () => {
         unsubscribe();
         window.removeEventListener('authChanged', handleAuthChange);
-        window.removeEventListener('online', handleOnline);
     };
   }, []);
 
   const handleLogout = async () => {
-    await firebaseService.auth.signOut();
-    setUser(null);
-    setAuthView('login');
+    console.log('🚪 Cerrando sesión...');
+    try {
+      // Limpiar completamente la sesión
+      localStorage.removeItem('firebase.auth.user');
+      sessionStorage.clear(); // Por si acaso queda algo
+
+      await firebaseService.auth.signOut();
+      setUser(null);
+      setAuthView('login');
+      setCurrentView('dashboard');
+
+      console.log('✅ Sesión cerrada exitosamente');
+    } catch (error) {
+      console.error('❌ Error al cerrar sesión:', error);
+      // Forzar limpieza aunque haya error
+      localStorage.removeItem('firebase.auth.user');
+      setUser(null);
+    }
   };
 
   const handlePasswordChanged = () => {
@@ -108,7 +95,23 @@ function App() {
     }
   };
 
+  // Función de seguridad: verificar permisos de acceso
+  const checkUserAccess = (requiredRole?: 'admin' | 'brigadista') => {
+    if (!user) return false;
+    if (!requiredRole) return true; // Si no requiere rol específico, solo autenticación
+    return user.role === requiredRole;
+  };
+
   const renderAdminView = () => {
+    // Verificación de seguridad: solo admins pueden acceder a estas vistas
+    if (!checkUserAccess('admin')) {
+      console.warn('🚫 Intento de acceso no autorizado a vista de admin');
+      return <div className="text-center text-red-600 p-8">
+        <h2 className="text-2xl font-bold mb-4">Acceso Denegado</h2>
+        <p>No tienes permisos para acceder a esta sección.</p>
+      </div>;
+    }
+
     switch (currentView) {
       case 'dashboard':
         return <DashboardView />;

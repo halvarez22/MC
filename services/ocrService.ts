@@ -1,3 +1,7 @@
+/**
+ * @deprecated Preferir `ocrOrchestrator` + Groq Vision (flag `VITE_USE_GROQ_VISION`).
+ * Pipeline Gemini vision legado — no cableado al UI vivo. No eliminar hasta go/no-go spike.
+ */
 export interface INEData {
   name: string;
   address: string;
@@ -23,8 +27,8 @@ class OCRService {
   private apiKey: string;
 
   constructor() {
-    // Acceder a la variable global definida por Vite
-    this.apiKey = (window as any)?.VITE_GEMINI_API_KEY || '';
+    // Acceso estrictamente vía import.meta.env (SSD Regla 5 — sin window.*)
+    this.apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 
     if (!this.apiKey) {
       console.warn('VITE_GEMINI_API_KEY not found. Make sure .env.local file exists with the correct API key');

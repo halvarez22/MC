@@ -1,20 +1,28 @@
 // Servicio de sincronización offline para INEs procesadas con OCR
 // Usa IndexedDB para almacenar datos sin conexión
+// DB_VERSION 2: imageDataFrontal + imageDataPosterior (migración graceful)
 
-interface PendingINE {
+export interface PendingINE {
   id: string;
   rawText: string;
   capturedAt: string;
   processed?: boolean;
-  structuredData?: any;
-  imageData?: string; // Base64 de la imagen
+  structuredData?: unknown;
+  /** @deprecated usar imageDataFrontal */
+  imageData?: string;
+  imageDataFrontal?: string | null;
+  imageDataPosterior?: string | null;
 }
+
+export type PendingINEImages = {
+  frontal?: string | null;
+  posterior?: string | null;
+};
 
 const DB_NAME = 'INEOfflineDB';
 const STORE_NAME = 'pendingInes';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-// Abrir base de datos
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -24,21 +32,58 @@ const openDB = (): Promise<IDBDatabase> => {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const tx = (event.target as IDBOpenDBRequest).transaction;
+      const oldVersion = event.oldVersion;
+
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        // Crear índices para búsquedas eficientes
         store.createIndex('processed', 'processed', { unique: false });
         store.createIndex('capturedAt', 'capturedAt', { unique: false });
+      }
+
+      // Migración v1 → v2: registros solo con imageData (frontal legacy)
+      if (oldVersion < 2 && tx) {
+        const store = tx.objectStore(STORE_NAME);
+        const cursorReq = store.openCursor();
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor) return;
+          const value = cursor.value as PendingINE;
+          const next: PendingINE = {
+            ...value,
+            imageDataFrontal: value.imageDataFrontal ?? value.imageData ?? null,
+            imageDataPosterior: value.imageDataPosterior ?? null,
+          };
+          cursor.update(next);
+          cursor.continue();
+        };
       }
     };
   });
 };
 
-// Guardar INE sin procesar
-export const savePendingINE = async (rawText: string, imageData?: string): Promise<string> => {
+function normalizeImages(
+  imageDataOrOpts?: string | PendingINEImages
+): { frontal: string | null; posterior: string | null } {
+  if (!imageDataOrOpts) return { frontal: null, posterior: null };
+  if (typeof imageDataOrOpts === 'string') {
+    return { frontal: imageDataOrOpts, posterior: null };
+  }
+  return {
+    frontal: imageDataOrOpts.frontal ?? null,
+    posterior: imageDataOrOpts.posterior ?? null,
+  };
+}
+
+/** Guardar INE sin procesar (acepta legacy string frontal u objeto ambas caras). */
+export const savePendingINE = async (
+  rawText: string,
+  imageDataOrOpts?: string | PendingINEImages
+): Promise<string> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readwrite');
   const store = transaction.objectStore(STORE_NAME);
+  const images = normalizeImages(imageDataOrOpts);
 
   const id = crypto.randomUUID();
   const ine: PendingINE = {
@@ -46,7 +91,9 @@ export const savePendingINE = async (rawText: string, imageData?: string): Promi
     rawText,
     capturedAt: new Date().toISOString(),
     processed: false,
-    imageData
+    imageData: images.frontal || undefined,
+    imageDataFrontal: images.frontal,
+    imageDataPosterior: images.posterior,
   };
 
   store.add(ine);
@@ -57,7 +104,6 @@ export const savePendingINE = async (rawText: string, imageData?: string): Promi
   });
 };
 
-// Obtener todas las INEs pendientes
 export const getPendingInes = async (): Promise<PendingINE[]> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readonly');
@@ -70,7 +116,6 @@ export const getPendingInes = async (): Promise<PendingINE[]> => {
   });
 };
 
-// Obtener INEs no procesadas
 export const getUnprocessedInes = async (): Promise<PendingINE[]> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readonly');
@@ -80,16 +125,17 @@ export const getUnprocessedInes = async (): Promise<PendingINE[]> => {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => {
       const allInes = request.result as PendingINE[];
-      // Filtrar manualmente las INEs no procesadas (incluyendo undefined)
-      const unprocessed = allInes.filter(ine => ine.processed !== true);
+      const unprocessed = allInes.filter((ine) => ine.processed !== true);
       resolve(unprocessed);
     };
     request.onerror = () => reject(request.error);
   });
 };
 
-// Marcar INE como procesada
-export const markINEAsProcessed = async (id: string, structuredData: any): Promise<void> => {
+export const markINEAsProcessed = async (
+  id: string,
+  structuredData: unknown
+): Promise<void> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readwrite');
   const store = transaction.objectStore(STORE_NAME);
@@ -110,7 +156,6 @@ export const markINEAsProcessed = async (id: string, structuredData: any): Promi
   });
 };
 
-// Eliminar INE procesada (cuando ya se envió al backend)
 export const deleteProcessedINE = async (id: string): Promise<void> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -123,7 +168,6 @@ export const deleteProcessedINE = async (id: string): Promise<void> => {
   });
 };
 
-// Limpiar todas las INEs (útil para testing)
 export const clearAllInes = async (): Promise<void> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -136,7 +180,6 @@ export const clearAllInes = async (): Promise<void> => {
   });
 };
 
-// Reparar registros corruptos (útil para migración)
 export const repairCorruptedInes = async (): Promise<void> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -146,34 +189,40 @@ export const repairCorruptedInes = async (): Promise<void> => {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => {
       const allInes = request.result as PendingINE[];
-
-      // Reparar cada registro que tenga processed undefined
-      allInes.forEach(ine => {
+      allInes.forEach((ine) => {
+        let dirty = false;
         if (ine.processed === undefined) {
-          ine.processed = false; // Establecer como no procesado por defecto
-          store.put(ine);
+          ine.processed = false;
+          dirty = true;
         }
+        if (ine.imageDataFrontal == null && ine.imageData) {
+          ine.imageDataFrontal = ine.imageData;
+          dirty = true;
+        }
+        if (ine.imageDataPosterior === undefined) {
+          ine.imageDataPosterior = null;
+          dirty = true;
+        }
+        if (dirty) store.put(ine);
       });
-
       resolve();
     };
     request.onerror = () => reject(request.error);
   });
 };
 
-// Obtener estadísticas
 export const getINEStats = async (): Promise<{
   total: number;
   processed: number;
   pending: number;
 }> => {
   const all = await getPendingInes();
-  const processed = all.filter(ine => ine.processed).length;
+  const processed = all.filter((ine) => ine.processed).length;
   const pending = all.length - processed;
 
   return {
     total: all.length,
     processed,
-    pending
+    pending,
   };
 };

@@ -10,6 +10,25 @@ interface FieldViewProps {
 }
 
 const FieldView: React.FC<FieldViewProps> = ({ user, onLogout }) => {
+  // Verificación de seguridad: solo brigadistas pueden acceder
+  if (!user || user.role !== 'brigadista') {
+    console.warn('🚫 Intento de acceso no autorizado a modo campo');
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-lg text-center">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">Acceso Denegado</h2>
+          <p className="text-gray-600">Solo los brigadistas tienen acceso a esta sección.</p>
+          <button
+            onClick={onLogout}
+            className="mt-4 px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark"
+          >
+            Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const handleSuccess = (isOffline: boolean, userRegistered?: boolean) => {
     if (isOffline) {
         alert('Estás sin conexión. El afiliado se ha guardado localmente y se sincronizará cuando recuperes la conexión.');

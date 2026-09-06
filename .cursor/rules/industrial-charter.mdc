@@ -1,0 +1,101 @@
+---
+description: Carta industrial inamovible del Sistema de Gestión de Afiliados (MC). APO, HRU, arquitectura, UX, SSD, SQA, MCP y cero parches.
+alwaysApply: true
+---
+
+# Carta Industrial Inamovible — MC / Sistema de Gestión de Afiliados
+
+Estas reglas son **obligatorias e innegociables** en cada sesión. Aplican a UI (`views/`, `components/`), hooks (`hooks/`), servicios (`services/`), tipos (`types.ts`) e integraciones LLM/OCR (Groq, Gemini, Google Vision, Tesseract).
+
+**Stack de referencia:** React + Vite + Tailwind · Firebase · OCR INE (`components/ine/*`) · `services/{ocr,groq,googleVision,firebase,offline}*`.
+
+---
+
+## REGLA 1 — APO: Auditoría Profunda Obligatoria + Planning Mode
+
+Prohibidos hotfixes ciegos. **Ningún cambio es trivial.**
+
+Antes de modificar lógica existente, el agente DEBE:
+
+1. **Grafo de impacto:** mapear UI → hooks → servicios (OCR/LLM/Firebase) → tipos.
+2. **Zero regressions:** listar efectos secundarios en componentes/tipos/contratos.
+3. **Planning Mode multi-archivo:** publicar `implementation_plan.md` con diagnóstico y plan **antes** de editar código. Sin plan aprobado → no hay diffs.
+
+```text
+❌ BAD: "arreglo rápido en INEProcessor.tsx"
+✅ GOOD: plan → mapear INECapture → INEProcessor → ocr/groq/googleVision → FieldView → types → luego cambios
+```
+
+---
+
+## REGLA 2 — HRU: Cero Hardcoding, Cero Regresiones, Universalidad
+
+- **Cero hardcoding:** prompts, umbrales OCR, endpoints, flags y configs van parametrizados (env, constants tipados o config central). No strings mágicos de negocio en UI.
+- **Cero regresiones:** el pipeline de documentos/INE debe preservar flujos online/offline existentes.
+- **Universalidad:** texto, imagen y PDF comparten el mismo contrato de interfaz/orquestación y la misma UX (captura → procesar → revisar → guardar/reintentar).
+
+---
+
+## REGLA 3 — Anti-God-Component y micro-servicios frontend
+
+- React **solo** decide a quién llamar y renderiza. Motores (OCR, prompts, Vision, sync) viven en `services/` o hooks.
+- Si un componente (p. ej. `INEProcessor.tsx`) crece más allá de lo presentacional → **alertar** y extraer a hook/servicio. Cero tolerancia a archivos monstruo.
+
+```text
+❌ BAD: OCR + prompt + parseo + Firebase dentro del JSX
+✅ GOOD: vista llama useInePipeline / groqService / ocrService; UI muestra estados
+```
+
+---
+
+## REGLA 4 — U-First: usabilidad fantástica
+
+- Prohibido bloquear al usuario sin salida. Toda interacción es guiada.
+- Ante error LLM/OCR/red: siempre **Volver** y **Reintentar** (y mensaje accionable).
+- Feedback constante con Tailwind: loading, progreso, éxito/error, transiciones profesionales. Efecto WOW sin ruido.
+
+---
+
+## REGLA 5 — SSD: Seguridad por Diseño (ISO/IEC 27034-1)
+
+- **Sanitización Zero Trust** antes de enviar a LLM: limpiar nulos, validar encoding; anonimizar PII cuando aplique.
+- **Anti-data-leak:** secrets solo vía `import.meta.env` / backend; nunca hardcodear API keys. Separar subida/almacenamiento de envío al LLM.
+- **Validación en servicios:** cada módulo (`ocrService`, `groqService`, `googleVisionService`, `firebaseService`, etc.) valida origen e integridad de `File`/buffers/payloads de forma independiente.
+
+---
+
+## REGLA 6 — SQA y estrangulamiento seguro (Strangler Fig)
+
+- **ARO:** no migrar sin documentar firma y efectos en UI.
+- Cambios estructurales **capa por capa**: probar servicio LLM/OCR aislado antes de cablear a `INECapture`/`FieldView`. Prohibidos refactors masivos simultáneos sin verificación.
+- **Idempotencia:** bloquear re-envíos concurrentes a LLM (disable UI / mutex / debounce) para evitar doble gasto de tokens y race conditions.
+
+---
+
+## REGLA 7 — MCP Readiness y Context Economy
+
+Aunque hoy el cliente llame APIs cloud, la arquitectura debe emular MCP:
+
+- **Tools/Resources:** OCR Canvas, Vision y PDF como módulos estandarizados en `services/`, no acoplados a JSX (migración futura a backend/MCP).
+- **Context Economy:** limitar páginas/imágenes y empaquetar solo contexto relevante al modelo.
+- **Prompts centralizados:** system prompts e inyección de contexto por un canal único (servicio/config), no dispersos en componentes. Preparar multi-agente.
+
+---
+
+## REGLA 8 — Descubrimiento total y Cero Parches
+
+1. Ante un problema: **mapear todo antes de actuar** (`types.ts`, imports, callers, tests).
+2. Un solo plan consolidado y definitivo — no “parches de prueba”.
+3. Si aparece efecto colateral no contemplado: **detener escritura**, actualizar el plan y pedir nueva aprobación. Cero parches aislados iterativos.
+
+---
+
+## Checklist obligatorio pre-código
+
+- [ ] `implementation_plan.md` con grafo de impacto y riesgos
+- [ ] Firmas/contratos de servicios afectados documentados
+- [ ] Sin hardcoding nuevo de prompts/keys/umbrales
+- [ ] UI sin callejones sin salida (Volver/Reintentar)
+- [ ] Validación y sanitización en la capa de servicio
+- [ ] Idempotencia en llamadas LLM
+- [ ] Extracción a servicio/hook si el componente se vuelve monstruo

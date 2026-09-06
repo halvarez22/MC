@@ -3,7 +3,6 @@ const CACHE_NAME = 'afiliados-cache-v1';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  '/index.css',
   '/manifest.json',
   'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap'
 ];
@@ -20,26 +19,24 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // No interceptar peticiones que comiencen con @ o sean archivos de desarrollo
-  if (event.request.url.includes('@') ||
-      event.request.url.includes('vite') ||
-      event.request.url.includes('node_modules') ||
-      event.request.url.includes('.tsx') ||
-      event.request.url.includes('.ts')) {
-    return; // Dejar que pase sin cache
+  const url = event.request.url;
+  // Nunca cachear assets de Vite/dev ni CSS/JS dinámicos (rompe estilos en local)
+  if (
+    url.includes('@') ||
+    url.includes('vite') ||
+    url.includes('node_modules') ||
+    url.includes('.tsx') ||
+    url.includes('.ts') ||
+    url.includes('.css') ||
+    url.includes('.js') ||
+    url.includes('localhost') ||
+    url.includes('127.0.0.1')
+  ) {
+    return;
   }
 
-  // Intercepta las peticiones de red solo para recursos estáticos.
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Si el recurso está en el caché, lo devuelve.
-        if (response) {
-          return response;
-        }
-        // Si no, realiza la petición a la red.
-        return fetch(event.request);
-      })
+    caches.match(event.request).then((response) => response || fetch(event.request))
   );
 });
 

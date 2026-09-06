@@ -1,0 +1,16 @@
+[
+  {
+    "id": "ine01",
+    "frontal": "ine01_frontal.jpg",
+    "posterior": "ine01_posterior.jpg",
+    "expectCurp": "XXXX000000HDFRRR00",
+    "expectName": "APELLIDO NOMBRE"
+  },
+  {
+    "id": "ine02",
+    "frontal": "ine02_frontal.jpg",
+    "posterior": "ine02_posterior.jpg",
+    "expectCurp": "YYYY000000MDFRRR00",
+    "expectName": "OTRO NOMBRE"
+  }
+]
