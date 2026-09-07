@@ -23,8 +23,11 @@ Analiza las imágenes (frontal y, si existe, posterior) y devuelve SOLO un objet
   "municipio": string opcional,
   "estado": string opcional,
   "localidad": string opcional,
+  "cic": string opcional (9 dígitos),
+  "ocr_credencial": string opcional (13 dígitos),
   "raw_ocr_text": string opcional con texto legible concatenado
 }
+Analiza el reverso de la credencial. Si existe una línea de lectura mecánica (MRZ) que comienza con "IDMEX", extrae los 9 dígitos siguientes como "cic" y los 13 dígitos siguientes al símbolo "<<" como "ocr_credencial". Si no son legibles, omítelos (no inventes datos).
 Reglas: omitir campos no visibles; no inventar; CURP/clave exactos si se leen; solo JSON.`;
 
 export type GroqIneBody = {

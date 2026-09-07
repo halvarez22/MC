@@ -62,7 +62,7 @@ const UsersView: React.FC<UsersViewProps> = ({ user }) => {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Usuarios</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gestión de Usuarios</h1>
         <Button onClick={handleOpenModalForCreate}>
           + Nuevo Usuario
         </Button>

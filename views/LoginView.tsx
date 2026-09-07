@@ -4,6 +4,7 @@ import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import ThemeToggle from '../components/ui/ThemeToggle';
+import PrivacyNoticeBody from '../components/legal/PrivacyNoticeBody';
 
 interface LoginViewProps {
   onNavigateToRegister: () => void;
@@ -131,13 +132,9 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
       <Modal
         isOpen={showPrivacyModal}
         onClose={() => setShowPrivacyModal(false)}
-        title="PROTECCIÓN Y USO DE DATOS PERSONALES"
+        title="Aviso de Privacidad (LFPDPPP)"
       >
-        <div className="prose prose-sm max-w-none">
-          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-            Los datos personales recabados serán protegidos, incorporados y tratados en el Sistema de Datos Personales correspondiente, de conformidad con lo dispuesto por la Ley Federal de Transparencia y Acceso a la Información Pública Gubernamental y demás disposiciones aplicables.
-          </p>
-        </div>
+        <PrivacyNoticeBody />
       </Modal>
     </div>
   );

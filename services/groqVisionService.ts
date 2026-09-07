@@ -10,9 +10,45 @@ export type IneVisionResult = INEStructuredData & {
   raw_ocr_text?: string;
 };
 
+/** Longitudes típicas MRZ INE (modelo D+). ~9 / ~13 digitos. */
+const CIC_LEN = { min: 8, max: 10 } as const;
+const OCR_CRED_LEN = { min: 12, max: 14 } as const;
+
 function approxDecodedBytes(b64: string): number {
   const clean = b64.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
   return Math.floor((clean.length * 3) / 4);
+}
+
+function digitsOnly(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+/**
+ * Post-proceso ligero: cic / ocr_credencial solo dígitos y longitud ~9 / ~13.
+ * Si no cumple, se omite el campo (no inventar).
+ */
+export function sanitizeIneVisionIdentifiers(data: IneVisionResult): IneVisionResult {
+  const out: IneVisionResult = { ...data };
+
+  if (out.cic != null && String(out.cic).trim() !== '') {
+    const cic = digitsOnly(out.cic);
+    if (cic.length >= CIC_LEN.min && cic.length <= CIC_LEN.max) {
+      out.cic = cic;
+    } else {
+      delete out.cic;
+    }
+  }
+
+  if (out.ocr_credencial != null && String(out.ocr_credencial).trim() !== '') {
+    const ocr = digitsOnly(out.ocr_credencial);
+    if (ocr.length >= OCR_CRED_LEN.min && ocr.length <= OCR_CRED_LEN.max) {
+      out.ocr_credencial = ocr;
+    } else {
+      delete out.ocr_credencial;
+    }
+  }
+
+  return out;
 }
 
 export function fileToBase64(file: File): Promise<string> {
@@ -80,7 +116,7 @@ class GroqVisionService {
       throw new Error('Respuesta del proxy sin structured JSON');
     }
 
-    return structured;
+    return sanitizeIneVisionIdentifiers(structured);
   }
 
   async extractIneFromFiles(

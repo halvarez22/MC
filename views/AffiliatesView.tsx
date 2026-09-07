@@ -121,7 +121,7 @@ const AffiliatesView: React.FC<AffiliatesViewProps> = ({ user }) => {
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Afiliados</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gestión de Afiliados</h1>
           {user.role === 'admin' && (
              <Button onClick={handleOpenModalForCreate}>
                 + Nuevo Afiliado
@@ -143,14 +143,14 @@ const AffiliatesView: React.FC<AffiliatesViewProps> = ({ user }) => {
           </div>
 
           <div className="w-full sm:w-auto">
-            <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Estatus
             </label>
             <select
               id="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
+              className="w-full sm:w-48 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-950 text-gray-900 dark:text-white focus:outline-none focus:ring-primary focus:border-primary"
             >
               <option value="todos">Todos los estatus</option>
               <option value="activo">Activo</option>

@@ -16,6 +16,7 @@ dist-ssr
 fixtures/*
 !fixtures/README.md
 !fixtures/manifest.example.json
+docs/auditoria/_last-extraction.json
 
 # Secretos / credenciales locales (nunca subir)
 ApiKey*

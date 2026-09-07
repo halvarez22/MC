@@ -33,19 +33,20 @@ const OfflineIndicator: React.FC = () => {
         };
     }, []);
 
-    const bgColor = isOnline ? 'bg-green-100' : 'bg-yellow-100';
-    const textColor = isOnline ? 'text-green-800' : 'text-yellow-800';
-    const ringColor = isOnline ? 'ring-green-500' : 'ring-yellow-500';
     const dotColor = isOnline ? 'bg-green-500' : 'bg-yellow-500';
 
     return (
         <div className="flex items-center space-x-4">
             {pendingCount > 0 && (
-                <div className="text-sm font-medium text-gray-600">
-                    <span className="font-bold">{pendingCount}</span> pendiente{pendingCount > 1 ? 's' : ''}
+                <div className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                    <span className="font-bold text-gray-900 dark:text-white">{pendingCount}</span> pendiente{pendingCount > 1 ? 's' : ''}
                 </div>
             )}
-            <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-semibold ${bgColor} ${textColor}`}>
+            <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                isOnline
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
+            }`}>
                 <span className={`h-2 w-2 rounded-full ${dotColor}`}></span>
                 <span>{isOnline ? 'En Línea' : 'Sin Conexión'}</span>
             </div>

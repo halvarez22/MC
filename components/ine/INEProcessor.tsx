@@ -1,10 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import INECapture from './INECapture';
+import ListaNominalStatusBadge from './ListaNominalStatusBadge';
 import { groqService } from '../../services/groqService';
 import type { INEStructuredData } from '../../types';
 import { savePendingINE, markINEAsProcessed } from '../../services/ineOfflineService';
 import { extractIneDocument } from '../../services/ocrOrchestrator';
-import { isGroqVisionEnabled } from '../../services/featureFlags';
+import {
+  isGroqVisionEnabled,
+  isListaNominalEnforceEnabled,
+} from '../../services/featureFlags';
+import { buildValidateListaNominalAuditEntry } from '../../services/listaNominalAudit';
+import { useListaNominalValidation } from '../../hooks/useListaNominalValidation';
 import { FORCE_INE_SYNC_EVENT } from '../../hooks/useSyncOffline';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
@@ -34,6 +40,15 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
   );
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const { isValidating: isLnValidating, lnResult, revalidate: revalidateListaNominal } =
+    useListaNominalValidation(structuredData);
+
+  const enforceListaNominal = isListaNominalEnforceEnabled();
+  const blockConfirmHard =
+    enforceListaNominal &&
+    !!lnResult &&
+    (lnResult.status === 'error' || lnResult.status === 'not_found');
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -192,6 +207,12 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
       estado: '',
       localidad: ''
     };
+
+    // Fase 3.3: preparar audit sin PII (persistencia Firebase = Fase 3.4)
+    if (lnResult) {
+      const auditPrep = buildValidateListaNominalAuditEntry(lnResult);
+      console.info('[AUDIT_PREP]', auditPrep.action, auditPrep.details);
+    }
 
     if (images) {
       onDataExtracted(dataToSend, images);
@@ -453,6 +474,14 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
               </div>
             </div>
 
+            <div className="mb-4">
+              <ListaNominalStatusBadge
+                isValidating={isLnValidating}
+                result={lnResult}
+                onRetry={revalidateListaNominal}
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <EditableDataField
                 label="Nombre completo"
@@ -479,6 +508,18 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
                 onChange={(value) => updateEditedField('clave_elector', value)}
                 isMonospace={true}
               />
+
+              {(() => {
+                const claveRaw =
+                  (isEditing && editedData ? editedData.clave_elector : data.clave_elector) || '';
+                const claveLen = claveRaw.replace(/\s/g, '').length;
+                if (!claveLen || claveLen === 18) return null;
+                return (
+                  <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    ⚠️ Revisa la Clave de Elector, parece tener un error de transposición
+                  </div>
+                );
+              })()}
 
               <EditableDataField
                 label="Fecha de nacimiento"
@@ -586,9 +627,18 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
               <Button onClick={handleStartEditing} variant="outline" disabled={isProcessing}>
                 ✏️ Editar datos
               </Button>
-              <Button onClick={handleAcceptData} className="bg-green-600 hover:bg-green-700" disabled={isProcessing}>
+              <Button
+                onClick={handleAcceptData}
+                className="bg-green-600 hover:bg-green-700"
+                disabled={isProcessing || blockConfirmHard}
+              >
                 ✅ Confirmar y continuar
               </Button>
+              {blockConfirmHard ? (
+                <p className="w-full text-center text-xs text-red-600">
+                  Validación Lista Nominal en modo estricto: corrige o reintenta antes de continuar.
+                </p>
+              ) : null}
             </>
           )}
         </div>

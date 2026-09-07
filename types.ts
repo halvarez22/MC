@@ -34,6 +34,18 @@ export interface INEData {
   confidence?: number; // Nivel de confianza del OCR
 }
 
+/** Modelo de Credencial para Votar (portal Lista Nominal / proveedores KYC). */
+export type IneCredentialModel =
+  | 'C'
+  | 'D'
+  | 'E'
+  | 'F'
+  | 'G'
+  | 'H'
+  | 'I'
+  | 'J'
+  | 'UNKNOWN';
+
 /** Contrato canónico de extracción estructurada INE (salida LLM/OCR pipeline). */
 export interface INEStructuredData {
   nombre_completo?: string;
@@ -47,6 +59,40 @@ export interface INEStructuredData {
   municipio?: string;
   estado?: string;
   localidad?: string;
+  /** Campos para Lista Nominal (Fase 3+; opcionales hasta extracción MRZ). */
+  modelo_credencial?: IneCredentialModel;
+  cic?: string;
+  id_ciudadano?: string;
+  ocr_credencial?: string;
+  numero_emision?: string;
+}
+
+/** Estatus canónico de validación Lista Nominal (sanitizado; no payload vendor). */
+export type ListaNominalStatus =
+  | 'valid'
+  | 'not_found'
+  | 'not_current'
+  | 'expired'
+  | 'skipped_offline'
+  | 'skipped_flag_off'
+  | 'error';
+
+export interface ListaNominalResult {
+  status: ListaNominalStatus;
+  checkedAt: string;
+  provider: string;
+  rawMessage?: string;
+  modelUsed?: IneCredentialModel;
+}
+
+/** Query tipada que el cliente envía al proxy SSD (sin API keys). */
+export interface ListaNominalQuery {
+  modelo: IneCredentialModel;
+  cic?: string;
+  id_ciudadano?: string;
+  ocr_credencial?: string;
+  clave_elector?: string;
+  numero_emision?: string;
 }
 
 export interface Affiliate {

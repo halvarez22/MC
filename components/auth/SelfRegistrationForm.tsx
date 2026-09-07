@@ -5,6 +5,8 @@ import { offlineService, OfflineRegistration } from '../../services/offlineServi
 import { emailService } from '../../services/emailService';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import PrivacyNoticeBody from '../legal/PrivacyNoticeBody';
 import { MEXICAN_STATES, ICONS } from '../../constants';
 import INEProcessor from '../ine/INEProcessor';
 
@@ -47,6 +49,8 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
     const [ineData, setIneData] = useState<INEStructuredData | null>(null);
     const [ineImages, setIneImages] = useState<{ frontal: File; posterior: File } | null>(null);
     const [userRegistered, setUserRegistered] = useState(false);
+    const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
+    const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
     const resetForm = () => {
         setFormData(initialFormData);
@@ -57,6 +61,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
         setIneData(null);
         setIneImages(null);
         setUserRegistered(false);
+        setAcceptedPrivacy(false);
         setShowINEProcessor(false);
     }
 
@@ -159,6 +164,11 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+
+        if (!acceptedPrivacy) {
+            setError('Debes aceptar el Aviso de Privacidad para continuar.');
+            return;
+        }
 
         if (DOCUMENT_TYPES.some(type => !uploadedFiles[type])) {
             setError('Todos los documentos son requeridos.');
@@ -276,6 +286,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
     }
 
     return (
+        <>
         <form onSubmit={handleSubmit} className="space-y-6">
             {/* Sección de captura de INE */}
             {isFieldMode && (
@@ -327,7 +338,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                 <Input id="address" name="address" label="Dirección" value={formData.address} onChange={handleChange} required />
                 <Input id="city" name="city" label="Ciudad" value={formData.city} onChange={handleChange} required />
                 <div>
-                    <label htmlFor="state" className="block text-sm font-medium text-gray-700">Estado</label>
+                    <label htmlFor="state" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Estado</label>
                     <select
                         id="state"
                         name="state"
@@ -344,7 +355,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
 
             {isFieldMode && (
                 <div className="pt-4 border-t">
-                    <h4 className="text-lg font-medium text-gray-800 mb-2">Geolocalización</h4>
+                    <h4 className="text-lg font-medium text-gray-800 dark:text-white mb-2">Geolocalización</h4>
                     <div className="flex items-center gap-4 flex-wrap">
                         <Button type="button" variant="secondary" onClick={handleGetLocation}>
                              <span className="mr-2">{ICONS.gps}</span>
@@ -361,13 +372,13 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                             </div>
                         )}
                     </div>
-                    {locationMessage && <p className={`text-sm mt-2 ${locationMessage.includes('éxito') ? 'text-green-600' : 'text-gray-600'}`}>{locationMessage}</p>}
+                    {locationMessage && <p className={`text-sm mt-2 ${locationMessage.includes('éxito') ? 'text-green-600 dark:text-green-300' : 'text-gray-600 dark:text-gray-300'}`}>{locationMessage}</p>}
                 </div>
             )}
 
             {/* Mostrar estado de documentos */}
             <div className="pt-4 border-t">
-                <h4 className="text-lg font-medium text-gray-800 mb-4">Estado de Documentos</h4>
+                <h4 className="text-lg font-medium text-gray-800 dark:text-white mb-4">Estado de Documentos</h4>
                 {ineData ? (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                         <h5 className="font-medium text-green-900 mb-2">✅ Documentos capturados automáticamente</h5>
@@ -391,17 +402,50 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
 
             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
+            <div className="pt-2">
+                <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        checked={acceptedPrivacy}
+                        onChange={(e) => setAcceptedPrivacy(e.target.checked)}
+                        required
+                    />
+                    <span>
+                        He leído y acepto el{' '}
+                        <button
+                            type="button"
+                            onClick={() => setShowPrivacyModal(true)}
+                            className="text-primary hover:text-primary-dark underline font-medium"
+                        >
+                            Aviso de Privacidad
+                        </button>{' '}
+                        (LFPDPPP), incluido el tratamiento de datos de mi Credencial para Votar y su
+                        validación ante proveedores autorizados de Lista Nominal cuando aplique.
+                    </span>
+                </label>
+            </div>
+
             <div className="flex justify-end pt-4">
                 <Button
                     type="submit"
                     isLoading={isLoading}
                     className="w-full md:w-auto"
-                    disabled={!ineData && isFieldMode}
+                    disabled={(!ineData && isFieldMode) || !acceptedPrivacy}
                 >
                     {isFieldMode ? 'Registrar Afiliado' : 'Enviar Registro'}
                 </Button>
             </div>
         </form>
+
+        <Modal
+            isOpen={showPrivacyModal}
+            onClose={() => setShowPrivacyModal(false)}
+            title="Aviso de Privacidad (LFPDPPP)"
+        >
+            <PrivacyNoticeBody />
+        </Modal>
+        </>
     );
 };
 

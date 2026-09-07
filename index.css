@@ -8,9 +8,16 @@
   }
   html.dark {
     @apply bg-gray-950 text-gray-100;
+    color-scheme: dark;
   }
   body {
     @apply bg-inherit text-inherit min-h-screen;
+  }
+  /* Fallback legibilidad: tablas y textos sin dark: explícito */
+  html.dark table,
+  html.dark th,
+  html.dark td {
+    color: inherit;
   }
 }
 
@@ -59,8 +66,9 @@
     flex: 1;
     font-size: 0.875rem;
   }
+  html.dark .responsive-table td:before,
   .dark .responsive-table td:before {
-    color: #d1d5db;
+    color: #f9fafb; /* casi blanco — mismo contraste que dashboard */
   }
   .responsive-table td[data-label="Acciones"] {
     justify-content: center;
