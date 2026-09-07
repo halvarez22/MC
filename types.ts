@@ -137,3 +137,26 @@ export interface Notification {
   read: boolean;
   relatedId: string; // e.g., affiliateId
 }
+
+/**
+ * Contrato C.3 — material de DEK envuelta con PIN (KeyStore IndexedDB).
+ * Nunca incluye el PIN ni la DEK en claro.
+ */
+export interface KeyPersistenceConfig {
+  /** Versión del esquema de persistencia de llaves. */
+  version: number;
+  /** Identificador de la DEK (coincide con EncryptedBlob.keyId). */
+  keyId: string;
+  /** Identificador estable del dispositivo / instalación. */
+  deviceId: string;
+  /** Salt PBKDF2 en Base64. */
+  salt: string;
+  /** DEK envuelta (AES-KW) en Base64 — nunca la llave en claro. */
+  wrappedKey: string;
+  /** Iteraciones PBKDF2 usadas al derivar la KEK. */
+  pbkdf2Iterations: number;
+  /** Si true, la UI debe solicitar PIN antes de unwrap. */
+  requiresPin: boolean;
+  /** Timestamp ISO de creación / última rotación. */
+  createdAt: string;
+}

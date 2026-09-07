@@ -8,7 +8,8 @@ import {
   getUnprocessedInes,
   markINEAsProcessed,
   getINEStats,
-  repairCorruptedInes
+  repairCorruptedInes,
+  deleteSensitiveData,
 } from '../services/ineOfflineService';
 import { groqService } from '../services/groqService';
 import { groqVisionService } from '../services/groqVisionService';
@@ -70,6 +71,15 @@ export const useSyncOffline = () => {
         const success = await sendToBackend(structuredData);
         if (success) {
           console.log(`✅ INE ${ine.id} procesada y enviada al backend`);
+          try {
+            await deleteSensitiveData(ine.id);
+            console.log(`🧹 Datos sensibles locales eliminados para ${ine.id}`);
+          } catch (cleanErr) {
+            console.warn(
+              `⚠️ Limpieza post-sync falló para ${ine.id} — reintentar más tarde:`,
+              cleanErr
+            );
+          }
         } else {
           console.warn(`⚠️ INE ${ine.id} procesada pero no enviada al backend`);
         }

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Button from '../ui/Button';
+import PrivacyConsentModal from '../ui/PrivacyConsentModal';
 
 interface INECaptureProps {
   onImagesCaptured: (images: { frontal: File; posterior: File }) => void;
@@ -9,6 +10,7 @@ interface INECaptureProps {
 type CaptureStep = 'frontal' | 'posterior' | 'preview';
 
 const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) => {
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [currentStep, setCurrentStep] = useState<CaptureStep>('frontal');
   const [frontalImage, setFrontalImage] = useState<File | null>(null);
   const [posteriorImage, setPosteriorImage] = useState<File | null>(null);
@@ -33,8 +35,10 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analysisCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Acceder a la cámara cuando el componente se monta
+  // Cámara solo DESPUÉS del consentimiento informado (LFPDPPP / U-First)
   useEffect(() => {
+    if (!privacyAccepted) return;
+
     let isMounted = true;
 
     const startCamera = async () => {
@@ -84,17 +88,14 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
 
     startCamera();
 
-    // Limpiar stream cuando el componente se desmonta
     return () => {
       isMounted = false;
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
     };
-  }, []);
+  }, [privacyAccepted]);
 
   // Analizar calidad de imagen en tiempo real
   useEffect(() => {
+    if (!privacyAccepted) return;
     if (!videoRef.current || !analysisCanvasRef.current || currentStep === 'preview') return;
 
     const analyzeImageQuality = () => {
@@ -223,7 +224,7 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
 
     const interval = setInterval(analyzeImageQuality, 1000); // Analizar cada segundo
     return () => clearInterval(interval);
-  }, [currentStep]);
+  }, [currentStep, privacyAccepted]);
 
   // Detener stream cuando cambiamos de paso
   useEffect(() => {
@@ -500,13 +501,23 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   );
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* Canvas ocultos para captura y análisis */}
-      <canvas ref={canvasRef} className="hidden" />
-      <canvas ref={analysisCanvasRef} className="hidden" />
+    <>
+      <PrivacyConsentModal
+        isOpen={!privacyAccepted}
+        onAccept={() => setPrivacyAccepted(true)}
+        onCancel={onCancel}
+      />
 
-      {currentStep !== 'preview' ? renderCameraView() : renderPreview()}
-    </div>
+      {privacyAccepted && (
+        <div className="max-w-4xl mx-auto p-6">
+          {/* Canvas ocultos para captura y análisis */}
+          <canvas ref={canvasRef} className="hidden" />
+          <canvas ref={analysisCanvasRef} className="hidden" />
+
+          {currentStep !== 'preview' ? renderCameraView() : renderPreview()}
+        </div>
+      )}
+    </>
   );
 };
 

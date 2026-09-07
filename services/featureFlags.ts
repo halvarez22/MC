@@ -16,3 +16,8 @@ export function isListaNominalEnabled(): boolean {
 export function isListaNominalEnforceEnabled(): boolean {
   return import.meta.env.VITE_LISTA_NOMINAL_ENFORCE === 'true';
 }
+
+/** Cifrado de campos en dispositivo (Fase C+). Default OFF hasta GO C.2. */
+export function isFieldEncryptionEnabled(): boolean {
+  return import.meta.env.VITE_USE_FIELD_ENCRYPTION === 'true';
+}

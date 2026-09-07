@@ -1,18 +1,14 @@
-# implementation_plan.md — Aviso de Privacidad LFPDPPP
+# implementation_plan.md — Ciclo C CERRADO
 
-**Estado:** En ejecución (requisito de negocio post Fase 3.3)  
-**Alcance:** Incorporar Aviso de Privacidad en la App (contenido parametrizable + UI de lectura + consentimiento en registro)  
-**Prohibido:** Activar `VITE_USE_LISTA_NOMINAL` sin GO explícito del dueño.
+**Estado:** 🟢 **C.0–C.4 APROBADAS DEFINITIVAS (Qwen)** · pipeline de cifrado en reposo completo.
 
----
+| Fase | Resultado |
+|------|-----------|
+| C.0 Spike Web Crypto | 🟢 |
+| C.1 cryptoService | 🟢 |
+| C.2 IndexedDB + deleteSensitiveData | 🟢 |
+| C.3 Key wrapping / persistencia PIN | 🟢 |
+| C.4 UI PinUnlock + PinSetup | 🟢 |
 
-## APO — Grafo
-
-```text
-constants / privacyNoticeContent  ←── texto LFPDPPP (placeholders env)
-views/PrivacyNoticeView.tsx       ←── lectura completa
-App.tsx                           ←── ruta/pantalla privacy
-LoginView + SelfRegistrationForm  ←── enlace + checkbox consentimiento
-```
-
-**Zero regressions:** registro sigue funcionando; sin consentimiento no se envía; flags LN intactas.
+**Producción:** `VITE_USE_FIELD_ENCRYPTION=false` hasta autorización explícita de negocio (Vercel + `.env.local`).  
+**Sin más cambios** en el pipeline de cifrado salvo nuevo GO.

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User } from './types';
 import { firebaseService } from './services/firebaseService';
-import { offlineService } from './services/offlineService';
 import { useSyncOffline } from './hooks/useSyncOffline';
+import { useFieldEncryptionLock } from './hooks/useFieldEncryptionLock';
+import { clearSessionKeyFromMemory } from './services/fieldEncryptionSession';
 import LoginView from './views/LoginView';
 import Layout from './components/layout/Layout';
 import DashboardView from './views/DashboardView';
@@ -14,6 +15,8 @@ import FieldView from './views/FieldView';
 import UsersView from './views/UsersView';
 import ForcePasswordChangeView from './views/ForcePasswordChangeView';
 import INEDataView from './views/INEDataView';
+import PinUnlockModal from './components/ui/PinUnlockModal';
+import PinSetupModal from './components/ui/PinSetupModal';
 
 export type View = 'dashboard' | 'affiliates' | 'audit' | 'users' | 'ine-data';
 
@@ -23,18 +26,25 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
-  // Hook para sincronización offline de INEs
   useSyncOffline();
 
+  const {
+    ready: pinReady,
+    needsPinUnlock,
+    needsPinSetup,
+    unlock,
+    setup,
+    refresh: refreshPinLock,
+  } = useFieldEncryptionLock();
+
   useEffect(() => {
-    const unsubscribe = firebaseService.auth.onAuthStateChanged(currentUser => {
+    const unsubscribe = firebaseService.auth.onAuthStateChanged((currentUser) => {
       console.log('🔐 Estado de autenticación cambiado:', currentUser);
       setUser(currentUser);
       if (currentUser) {
         if (currentUser.role === 'admin') {
           setCurrentView('dashboard');
         } else if (currentUser.role === 'brigadista') {
-          // Los brigadistas van directo al modo campo (afiliaciones)
           console.log('👷 Brigadista autenticado, redirigiendo a modo campo');
         }
       }
@@ -42,33 +52,33 @@ function App() {
     });
 
     const handleAuthChange = () => {
-        const userJson = localStorage.getItem('firebase.auth.user');
-        const updatedUser = userJson ? JSON.parse(userJson) : null;
-        setUser(updatedUser);
-        if (updatedUser && updatedUser.role === 'admin') {
-            setCurrentView('dashboard');
-        }
-        if (updatedUser && updatedUser.role === 'brigadista') {
-            setCurrentView('dashboard'); // Los brigadistas van directo a afiliaciones
-        }
-    }
+      const userJson = localStorage.getItem('firebase.auth.user');
+      const updatedUser = userJson ? JSON.parse(userJson) : null;
+      setUser(updatedUser);
+      if (updatedUser && updatedUser.role === 'admin') {
+        setCurrentView('dashboard');
+      }
+      if (updatedUser && updatedUser.role === 'brigadista') {
+        setCurrentView('dashboard');
+      }
+    };
     window.addEventListener('authChanged', handleAuthChange);
 
-    // SINCRONIZACIÓN SIMPLIFICADA - EL HOOK useSyncOffline SE ENCARGARÁ
-    console.log("📱 Sincronización delegada al hook useSyncOffline");
+    console.log('📱 Sincronización delegada al hook useSyncOffline');
 
     return () => {
-        unsubscribe();
-        window.removeEventListener('authChanged', handleAuthChange);
+      unsubscribe();
+      window.removeEventListener('authChanged', handleAuthChange);
     };
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     console.log('🚪 Cerrando sesión...');
     try {
-      // Limpiar completamente la sesión
       localStorage.removeItem('firebase.auth.user');
-      sessionStorage.clear(); // Por si acaso queda algo
+      sessionStorage.clear();
+      clearSessionKeyFromMemory();
+      await refreshPinLock();
 
       await firebaseService.auth.signOut();
       setUser(null);
@@ -78,38 +88,35 @@ function App() {
       console.log('✅ Sesión cerrada exitosamente');
     } catch (error) {
       console.error('❌ Error al cerrar sesión:', error);
-      // Forzar limpieza aunque haya error
       localStorage.removeItem('firebase.auth.user');
+      clearSessionKeyFromMemory();
       setUser(null);
     }
-  };
+  }, [refreshPinLock]);
 
   const handlePasswordChanged = () => {
-    // Actualiza el estado local del usuario para reflejar el cambio
-    // y permitir que la aplicación renderice la vista correcta.
     if (user) {
       const updatedUser = { ...user, requiresPasswordChange: false };
       setUser(updatedUser);
-      // También actualiza sessionStorage para persistir el cambio en la sesión
       sessionStorage.setItem('firebase.auth.user', JSON.stringify(updatedUser));
     }
   };
 
-  // Función de seguridad: verificar permisos de acceso
   const checkUserAccess = (requiredRole?: 'admin' | 'brigadista') => {
     if (!user) return false;
-    if (!requiredRole) return true; // Si no requiere rol específico, solo autenticación
+    if (!requiredRole) return true;
     return user.role === requiredRole;
   };
 
   const renderAdminView = () => {
-    // Verificación de seguridad: solo admins pueden acceder a estas vistas
     if (!checkUserAccess('admin')) {
       console.warn('🚫 Intento de acceso no autorizado a vista de admin');
-      return <div className="text-center text-red-600 p-8">
-        <h2 className="text-2xl font-bold mb-4">Acceso Denegado</h2>
-        <p>No tienes permisos para acceder a esta sección.</p>
-      </div>;
+      return (
+        <div className="text-center text-red-600 p-8">
+          <h2 className="text-2xl font-bold mb-4">Acceso Denegado</h2>
+          <p>No tienes permisos para acceder a esta sección.</p>
+        </div>
+      );
     }
 
     switch (currentView) {
@@ -128,7 +135,7 @@ function App() {
     }
   };
 
-  if (loading) {
+  if (loading || !pinReady) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <Spinner />
@@ -138,16 +145,36 @@ function App() {
 
   // --- Enrutamiento basado en Rol y Estado de Contraseña ---
   if (user) {
-    // Prioridad 1: Forzar cambio de contraseña si es requerido
     if (user.requiresPasswordChange) {
-      return <ForcePasswordChangeView onPasswordChanged={handlePasswordChanged} onLogout={handleLogout} />;
+      return (
+        <ForcePasswordChangeView
+          onPasswordChanged={handlePasswordChanged}
+          onLogout={handleLogout}
+        />
+      );
     }
 
-    // Prioridad 2: Enrutamiento basado en Rol
+    // C.4: prioridad PIN sobre el resto de la app autenticada
+    if (needsPinUnlock) {
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+          <PinUnlockModal isOpen onUnlock={unlock} onLogout={handleLogout} />
+        </div>
+      );
+    }
+
+    if (needsPinSetup) {
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+          <PinSetupModal isOpen onSetup={setup} onLogout={handleLogout} />
+        </div>
+      );
+    }
+
     if (user.role === 'brigadista') {
       return <FieldView user={user} onLogout={handleLogout} />;
     }
-    
+
     if (user.role === 'admin') {
       return (
         <Layout
@@ -161,8 +188,7 @@ function App() {
       );
     }
   }
-  
-  // Sin usuario o con rol no válido: Mostrar vistas de autenticación
+
   if (authView === 'register') {
     return <RegisterView onNavigateToLogin={() => setAuthView('login')} />;
   }
