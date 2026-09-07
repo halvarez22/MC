@@ -127,25 +127,21 @@ e 3H6* HGTLT 1 AÑO DE REGISTRO 1991 Qi
   };
 
   // Función para verificar estado de autenticación
-  (window as any).checkAuthStatus = () => {
+  (window as any).checkAuthStatus = async () => {
     try {
       console.log('🔍 Estado de autenticación actual:');
-
-      // Verificar localStorage
-      const storedUser = localStorage.getItem('firebase.auth.user');
-      console.log('💾 Usuario en localStorage:', storedUser ? JSON.parse(storedUser) : 'Ninguno');
-
-      // Verificar sessionStorage (por si acaso)
-      const sessionUser = sessionStorage.getItem('firebase.auth.user');
-      console.log('💾 Usuario en sessionStorage:', sessionUser ? JSON.parse(sessionUser) : 'Ninguno');
-
+      const { getStoredAuthUser } = await import('./services/authSessionStore');
+      const sessionUser = getStoredAuthUser();
+      const legacyLocal = localStorage.getItem('firebase.auth.user');
+      console.log('💾 Usuario en sessionStorage (activo):', sessionUser || 'Ninguno');
+      console.log('💾 Usuario legacy localStorage (debe estar vacío):', legacyLocal ? JSON.parse(legacyLocal) : 'Ninguno');
       return {
-        localStorage: storedUser ? JSON.parse(storedUser) : null,
-        sessionStorage: sessionUser ? JSON.parse(sessionUser) : null
+        sessionStorage: sessionUser,
+        localStorageLegacy: legacyLocal ? JSON.parse(legacyLocal) : null,
       };
     } catch (error) {
       console.error('❌ Error verificando estado:', error);
-      return { error: error.message };
+      return { error: (error as Error).message };
     }
   };
 
@@ -172,46 +168,43 @@ e 3H6* HGTLT 1 AÑO DE REGISTRO 1991 Qi
   };
 
   // Función para verificar integridad de la sesión (seguridad)
-  (window as any).verifySessionIntegrity = () => {
+  (window as any).verifySessionIntegrity = async () => {
     try {
       console.log('🔐 Verificando integridad de la sesión...');
-
-      const storedUser = localStorage.getItem('firebase.auth.user');
-      if (!storedUser) {
+      const { getStoredAuthUser, clearStoredAuthUser } = await import('./services/authSessionStore');
+      const user = getStoredAuthUser();
+      if (!user) {
         console.log('✅ No hay sesión activa - Estado seguro');
         return { status: 'safe', message: 'No hay sesión activa' };
       }
 
-      const user = JSON.parse(storedUser);
-
-      // Verificar que tenga todos los campos requeridos
       const requiredFields = ['uid', 'email', 'role'];
-      const missingFields = requiredFields.filter(field => !user[field]);
+      const missingFields = requiredFields.filter((field) => !(user as Record<string, unknown>)[field]);
 
       if (missingFields.length > 0) {
         console.warn('🚨 Sesión corrupta - Faltan campos:', missingFields);
+        clearStoredAuthUser();
         return { status: 'corrupted', message: `Faltan campos: ${missingFields.join(', ')}` };
       }
 
-      // Verificar que el rol sea válido
       const validRoles = ['admin', 'brigadista', 'simpatizante'];
       if (!validRoles.includes(user.role)) {
         console.warn('🚨 Sesión corrupta - Rol inválido:', user.role);
+        clearStoredAuthUser();
         return { status: 'corrupted', message: `Rol inválido: ${user.role}` };
       }
 
-      // Verificar que el UID tenga formato válido
       if (!user.uid || user.uid.length < 5) {
         console.warn('🚨 Sesión corrupta - UID inválido');
+        clearStoredAuthUser();
         return { status: 'corrupted', message: 'UID inválido' };
       }
 
       console.log('✅ Sesión íntegra - Usuario válido:', user.email, `(${user.role})`);
-      return { status: 'valid', user: user };
-
+      return { status: 'ok', user };
     } catch (error) {
       console.error('❌ Error verificando integridad:', error);
-      return { status: 'error', message: error.message };
+      return { status: 'error', message: (error as Error).message };
     }
   };
 

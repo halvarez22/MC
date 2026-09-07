@@ -1,14 +1,9 @@
-# implementation_plan.md — Ciclo C CERRADO
+# implementation_plan.md — Auth: exigir login en cada visita
 
-**Estado:** 🟢 **C.0–C.4 APROBADAS DEFINITIVAS (Qwen)** · pipeline de cifrado en reposo completo.
+**Diagnóstico:** el mock persistía `firebase.auth.user` en `localStorage` → restauraba `admin` sin LoginView.
 
-| Fase | Resultado |
-|------|-----------|
-| C.0 Spike Web Crypto | 🟢 |
-| C.1 cryptoService | 🟢 |
-| C.2 IndexedDB + deleteSensitiveData | 🟢 |
-| C.3 Key wrapping / persistencia PIN | 🟢 |
-| C.4 UI PinUnlock + PinSetup | 🟢 |
+**Cambio:** sesión solo en `sessionStorage` (+ limpieza de la clave legacy en `localStorage`).
+- Cerrar pestaña / nueva visita → pide login.
+- F5 en la misma pestaña → mantiene sesión (U-First en campo).
 
-**Producción:** `VITE_USE_FIELD_ENCRYPTION=false` hasta autorización explícita de negocio (Vercel + `.env.local`).  
-**Sin más cambios** en el pipeline de cifrado salvo nuevo GO.
+**Archivos:** `services/authSessionStore.ts` (nuevo), `firebaseService.ts`, `App.tsx`, `index.tsx`.

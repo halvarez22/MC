@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from './types';
 import { firebaseService } from './services/firebaseService';
+import {
+  clearStoredAuthUser,
+  getStoredAuthUser,
+  setStoredAuthUser,
+} from './services/authSessionStore';
 import { useSyncOffline } from './hooks/useSyncOffline';
 import { useFieldEncryptionLock } from './hooks/useFieldEncryptionLock';
 import { clearSessionKeyFromMemory } from './services/fieldEncryptionSession';
@@ -52,8 +57,7 @@ function App() {
     });
 
     const handleAuthChange = () => {
-      const userJson = localStorage.getItem('firebase.auth.user');
-      const updatedUser = userJson ? JSON.parse(userJson) : null;
+      const updatedUser = getStoredAuthUser();
       setUser(updatedUser);
       if (updatedUser && updatedUser.role === 'admin') {
         setCurrentView('dashboard');
@@ -75,8 +79,7 @@ function App() {
   const handleLogout = useCallback(async () => {
     console.log('🚪 Cerrando sesión...');
     try {
-      localStorage.removeItem('firebase.auth.user');
-      sessionStorage.clear();
+      clearStoredAuthUser();
       clearSessionKeyFromMemory();
       await refreshPinLock();
 
@@ -88,7 +91,7 @@ function App() {
       console.log('✅ Sesión cerrada exitosamente');
     } catch (error) {
       console.error('❌ Error al cerrar sesión:', error);
-      localStorage.removeItem('firebase.auth.user');
+      clearStoredAuthUser();
       clearSessionKeyFromMemory();
       setUser(null);
     }
@@ -98,7 +101,7 @@ function App() {
     if (user) {
       const updatedUser = { ...user, requiresPasswordChange: false };
       setUser(updatedUser);
-      sessionStorage.setItem('firebase.auth.user', JSON.stringify(updatedUser));
+      setStoredAuthUser(updatedUser);
     }
   };
 

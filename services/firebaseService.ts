@@ -1,4 +1,9 @@
 import type { Affiliate, DashboardMetrics, AuditLog, User, Document, Notification } from '../types';
+import {
+    clearStoredAuthUser,
+    getStoredAuthUser,
+    setStoredAuthUser,
+} from './authSessionStore';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -149,11 +154,9 @@ const notifyListeners = <T>(listeners: Set<Listener<T>>, data: T[]) => {
 export const firebaseService = {
     auth: {
         onAuthStateChanged: (callback: (user: User | null) => void): (() => void) => {
-            // Verificar inmediatamente el estado de autenticación
             const checkAuthState = () => {
                 try {
-                    const userJson = localStorage.getItem('firebase.auth.user');
-                    const user = userJson ? JSON.parse(userJson) : null;
+                    const user = getStoredAuthUser();
                     console.log('🔍 Verificando estado de autenticación:', user ? `Usuario: ${user.email} (${user.role})` : 'No autenticado');
                     callback(user);
                 } catch (error) {
@@ -162,20 +165,14 @@ export const firebaseService = {
                 }
             };
 
-            // Verificar inmediatamente
             checkAuthState();
 
-            // También verificar cuando cambie el localStorage
-            const handleStorageChange = (e: StorageEvent) => {
-                if (e.key === 'firebase.auth.user') {
-                    checkAuthState();
-                }
-            };
-
-            window.addEventListener('storage', handleStorageChange);
+            // authChanged cubre la misma pestaña; storage solo otras (sessionStorage es por pestaña).
+            const handleAuthChanged = () => checkAuthState();
+            window.addEventListener('authChanged', handleAuthChanged);
 
             return () => {
-                window.removeEventListener('storage', handleStorageChange);
+                window.removeEventListener('authChanged', handleAuthChanged);
             };
         },
         signInWithEmailAndPassword: async (email: string, password: string): Promise<{ user: User | null; error: { message: string } | null }> => {
@@ -191,8 +188,8 @@ export const firebaseService = {
             // En una app real, la contraseña estaría hasheada. Aquí es una simulación simple.
             if (foundUser && (password === 'admin' || password === 'brigadista' || password === 'password123')) {
                 const userToStore = { ...foundUser };
-                // Usar localStorage en lugar de sessionStorage para persistencia entre sesiones/dispositivos
-                localStorage.setItem('firebase.auth.user', JSON.stringify(userToStore));
+                // sessionStorage: nueva visita / cerrar pestaña → exige login de nuevo
+                setStoredAuthUser(userToStore);
                 window.dispatchEvent(new Event('authChanged'));
                 return { user: userToStore, error: null };
             }
@@ -200,18 +197,17 @@ export const firebaseService = {
             return { user: null, error: { message: 'Credenciales inválidas' } };
         },
         signOut: async (): Promise<void> => {
-            localStorage.removeItem('firebase.auth.user');
+            clearStoredAuthUser();
             window.dispatchEvent(new Event('authChanged'));
         },
     },
 
     updateCurrentUserPassword: async (newPassword: string): Promise<void> => {
         await new Promise(res => setTimeout(res, 500));
-        const userJson = localStorage.getItem('firebase.auth.user');
-        if (!userJson) {
+        const currentUser = getStoredAuthUser();
+        if (!currentUser) {
             throw new Error("No hay un usuario autenticado.");
         }
-        const currentUser: User = JSON.parse(userJson);
 
         const userInDb = mockUsers.find(u => u.uid === currentUser.uid);
         if (!userInDb) {
@@ -235,7 +231,7 @@ export const firebaseService = {
 
         // Actualizar la sesión
         const updatedUserSession = { ...currentUser, requiresPasswordChange: false };
-        localStorage.setItem('firebase.auth.user', JSON.stringify(updatedUserSession));
+        setStoredAuthUser(updatedUserSession);
 
         notifyListeners(userListeners, mockUsers);
     },
