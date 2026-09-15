@@ -42,9 +42,18 @@ export function authorizeAdminListBearer(authorizationHeader: string | undefined
   return timingSafeEqualStr(got, expected);
 }
 
+export function resolveAdminListOrgIds(): string[] {
+  const raw = process.env.ADMIN_DEFAULT_ORG_ID?.trim() || 'org_default';
+  const ids = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? [...new Set(ids)] : ['org_default'];
+}
+
+/** @deprecated usar resolveAdminListOrgIds — se mantiene por compat smoke */
 export function resolveAdminListOrgId(): string {
-  const fromEnv = process.env.ADMIN_DEFAULT_ORG_ID?.trim();
-  return fromEnv || 'org_default';
+  return resolveAdminListOrgIds()[0] || 'org_default';
 }
 
 function toDto(record: EncryptedAffiliateRecord, plain: {
@@ -92,25 +101,30 @@ export async function processSecureAffiliateListRequest(params: {
     }
   }
 
-  // orgId SOLO desde env server — no confiar en query del cliente (anti-enumeración demo)
-  const orgId = resolveAdminListOrgId();
+  // orgIds SOLO desde env server (lista allowlist, coma-separada) — nunca query del cliente
+  const orgIds = resolveAdminListOrgIds();
 
   try {
-    const rows = await listEncryptedByOrg(orgId, { limit: 100 });
+    const seen = new Set<string>();
     const affiliates: DecryptedAffiliateDto[] = [];
 
-    for (const row of rows) {
-      try {
-        const plain = await decryptAffiliateRecord(row, {
-          blindSecret: process.env.CLOUD_BLIND_SECRET,
-        });
-        affiliates.push(toDto(row, plain));
-      } catch (err) {
-        console.warn(
-          '[secure-list] decrypt skip id=',
-          row.id,
-          err instanceof Error ? err.message : err
-        );
+    for (const orgId of orgIds) {
+      const rows = await listEncryptedByOrg(orgId, { limit: 100 });
+      for (const row of rows) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        try {
+          const plain = await decryptAffiliateRecord(row, {
+            blindSecret: process.env.CLOUD_BLIND_SECRET,
+          });
+          affiliates.push(toDto(row, plain));
+        } catch (err) {
+          console.warn(
+            '[secure-list] decrypt skip id=',
+            row.id,
+            err instanceof Error ? err.message : err
+          );
+        }
       }
     }
 
@@ -118,7 +132,8 @@ export async function processSecureAffiliateListRequest(params: {
       status: 200,
       body: {
         ok: true,
-        orgId,
+        orgId: orgIds.join(','),
+        orgIds,
         count: affiliates.length,
         affiliates,
       },

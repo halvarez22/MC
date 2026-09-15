@@ -1,7 +1,16 @@
 # APO — Admin lee afiliados cifrados (demo cliente)
 
-**Estado:** 🟢 **GO APO.1+2 EN CURSO / listo para auditoría** (Qwen 2026-09-15)  
-**Condiciones aplicadas:** orgId solo `ADMIN_DEFAULT_ORG_ID` · Bearer `ADMIN_LIST_SECRET` · ESM `.js` · Strangler UI · TODO APO.3
+**Estado:** 🟢 **APO.1+2 + APO.2.1 formalizado** (commit autorizado 2026-09-15)
+
+### APO.2.1 — Allowlist multi-org + org de sync estable (ex-hotfix)
+
+| Item | Decisión |
+|------|----------|
+| Lectura Admin | `ADMIN_DEFAULT_ORG_ID` coma-separada (solo env server) |
+| Sync write | `VITE_SYNC_ORG_ID` → fallback `org_default` (sin uid como org) |
+| UI | CURP en claro; no mostrar docId `org__blind` como si fuera ciphertext |
+| Datos | Sin borrado Firestore; `org_demo_*` huérfano por KEK rotada pre-APO.2.1 → re-captura |
+| STOP | D.1 / crypto D.2 / autocaptura / Groq OCR intocados |
 
 ---
 

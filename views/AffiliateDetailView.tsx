@@ -59,7 +59,11 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({ affiliate, on
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{fullName}</h1>
-          <p className="text-gray-500 dark:text-gray-300">ID: {affiliate.id}</p>
+          <p className="text-gray-500 dark:text-gray-300">
+            {affiliate.ineData?.curp
+              ? `CURP: ${affiliate.ineData.curp}`
+              : `Ref: ${affiliate.id.slice(0, 16)}…`}
+          </p>
         </div>
         <Button onClick={onBack} variant="secondary" className="w-full sm:w-auto">
           &larr; Volver a la lista
@@ -71,6 +75,7 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({ affiliate, on
         <dl className="divide-y divide-gray-200 dark:divide-gray-700">
           <DetailItem label="Correo Electrónico" value={email} />
           <DetailItem label="Teléfono" value={phone} />
+          <DetailItem label="CURP" value={affiliate.ineData?.curp} />
           <DetailItem label="Dirección" value={`${address}, ${city}, ${state}, C.P. ${zip}`} />
         </dl>
       </Card>

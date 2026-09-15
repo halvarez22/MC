@@ -85,7 +85,11 @@ const AffiliateTable: React.FC<AffiliateTableProps> = ({
                   <div className="text-sm font-medium text-gray-900 dark:text-white">
                     {affiliate.fullName}
                   </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-300">ID: {affiliate.id}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-300">
+                    {affiliate.ineData?.curp
+                      ? `CURP: ${affiliate.ineData.curp}`
+                      : `Ref: ${affiliate.id.slice(0, 12)}…`}
+                  </div>
                 </td>
                 <td data-label="Contacto:" className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900 dark:text-white">{affiliate.email}</div>

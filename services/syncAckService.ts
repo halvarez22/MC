@@ -57,16 +57,13 @@ function resolveOrgId(structuredData: unknown): string {
   const o = asRecord(structuredData);
   if (typeof o.orgId === 'string' && o.orgId.trim()) return o.orgId.trim();
   if (typeof o.org_id === 'string' && o.org_id.trim()) return o.org_id.trim();
-  try {
-    const raw = sessionStorage.getItem('supabase.auth.user');
-    if (raw) {
-      const u = JSON.parse(raw) as { uid?: string; orgId?: string };
-      if (u.orgId) return String(u.orgId);
-      if (u.uid) return String(u.uid);
-    }
-  } catch {
-    /* ignore */
-  }
+  // Demo/prod alineado: NO usar uid como org (fragmentaba registros fuera de org_default).
+  const fromEnv =
+    (typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      (import.meta.env.VITE_SYNC_ORG_ID as string | undefined)?.trim()) ||
+    '';
+  if (fromEnv) return fromEnv;
   return 'org_default';
 }
 
