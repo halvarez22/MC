@@ -205,6 +205,39 @@ export async function findEncryptedByBlindCurpExact(
   return snap.docs[0]!.data() as EncryptedAffiliateRecord;
 }
 
+const DEFAULT_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 200;
+
+/**
+ * Lista por org_id (SIEMPRE filtrado — prohibido listAll).
+ * Usar solo desde API server-side.
+ */
+export async function listEncryptedByOrg(
+  orgId: string,
+  opts?: { limit?: number }
+): Promise<EncryptedAffiliateRecord[]> {
+  const id = orgId?.trim();
+  if (!id) throw new Error('orgId requerido');
+
+  const rawLimit = opts?.limit ?? DEFAULT_LIST_LIMIT;
+  const limit = Math.min(Math.max(1, rawLimit), MAX_LIST_LIMIT);
+
+  if (!useRealFirestore()) {
+    return [...memoryStore.values()]
+      .filter((r) => r.org_id === id)
+      .slice(0, limit);
+  }
+
+  const db = getAdminDb();
+  const snap = await db
+    .collection(ENCRYPTED_AFFILIATES_COLLECTION)
+    .where('org_id', '==', id)
+    .limit(limit)
+    .get();
+
+  return snap.docs.map((d) => d.data() as EncryptedAffiliateRecord);
+}
+
 export function dumpEncryptedCollection(): EncryptedAffiliateRecord[] {
   return [...memoryStore.values()];
 }

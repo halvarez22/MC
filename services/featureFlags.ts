@@ -21,3 +21,11 @@ export function isListaNominalEnforceEnabled(): boolean {
 export function isFieldEncryptionEnabled(): boolean {
   return import.meta.env.VITE_USE_FIELD_ENCRYPTION === 'true';
 }
+
+/**
+ * Lista admin vía decrypt server-side (APO Admin).
+ * Default OFF → mock legacy firebaseService (Strangler).
+ */
+export function isEncryptedAffiliatesAdminEnabled(): boolean {
+  return import.meta.env.VITE_USE_ENCRYPTED_AFFILIATES_ADMIN === 'true';
+}
