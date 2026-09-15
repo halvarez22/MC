@@ -1,27 +1,59 @@
-const CACHE_NAME = 'afiliados-cache-v1';
-// Lista de archivos a cachear. En una app real, esto se generaría dinámicamente.
+const CACHE_NAME = 'afiliados-cache-v2';
+// No precachear index.html ni `/`: tras un redeploy Vite cambia los hashes
+// de /assets/* y un HTML viejo en caché provoca 404 en JS/CSS.
 const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
   '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap'
+  'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap',
 ];
 
-self.addEventListener('install', event => {
-  // Realiza la instalación: abre el caché y añade los recursos principales.
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Cache abierto');
-        return cache.addAll(URLS_TO_CACHE);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[SW] Cache abierto', CACHE_NAME);
+      return cache.addAll(URLS_TO_CACHE);
+    })
   );
 });
 
-self.addEventListener('fetch', event => {
-  const url = event.request.url;
-  // Nunca cachear assets de Vite/dev ni CSS/JS dinámicos (rompe estilos en local)
+self.addEventListener('activate', (event) => {
+  const cacheWhitelist = [CACHE_NAME];
+  event.waitUntil(
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames.map((cacheName) => {
+            if (!cacheWhitelist.includes(cacheName)) {
+              console.log('[SW] Eliminando caché antiguo:', cacheName);
+              return caches.delete(cacheName);
+            }
+            return undefined;
+          })
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = request.url;
+
+  // Shell SPA: siempre red (evita HTML con hashes obsoletos tras redeploy).
   if (
+    request.mode === 'navigate' ||
+    request.destination === 'document' ||
+    url.endsWith('/') ||
+    url.includes('/index.html')
+  ) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // No interceptar assets hasheados ni módulos (red directa).
+  if (
+    url.includes('/assets/') ||
     url.includes('@') ||
     url.includes('vite') ||
     url.includes('node_modules') ||
@@ -36,22 +68,6 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((response) => response || fetch(event.request))
-  );
-});
-
-self.addEventListener('activate', event => {
-  // Limpia cachés antiguos si es necesario.
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.match(request).then((response) => response || fetch(request))
   );
 });

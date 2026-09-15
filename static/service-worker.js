@@ -1,50 +1,63 @@
-const CACHE_NAME = 'afiliados-cache-v1';
-// Lista de archivos a cachear. En una app real, esto se generaría dinámicamente.
+const CACHE_NAME = 'afiliados-cache-v2';
+// Mirror de public/service-worker.js (Vite sirve public/ → dist).
 const URLS_TO_CACHE = [
-  '/',
-  '/index.html',
-  'https://cdn.tailwindcss.com',
-  'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap'
+  '/manifest.json',
+  'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap',
 ];
 
-self.addEventListener('install', event => {
-  // Realiza la instalación: abre el caché y añade los recursos principales.
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Cache abierto');
-        return cache.addAll(URLS_TO_CACHE);
-      })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(URLS_TO_CACHE))
   );
 });
 
-self.addEventListener('fetch', event => {
-  // Intercepta las peticiones de red.
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Si el recurso está en el caché, lo devuelve.
-        if (response) {
-          return response;
-        }
-        // Si no, realiza la petición a la red.
-        return fetch(event.request);
-      })
-  );
-});
-
-self.addEventListener('activate', event => {
-  // Limpia cachés antiguos si es necesario.
+self.addEventListener('activate', (event) => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames.map((cacheName) =>
+            cacheWhitelist.includes(cacheName) ? undefined : caches.delete(cacheName)
+          )
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const url = request.url;
+
+  if (
+    request.mode === 'navigate' ||
+    request.destination === 'document' ||
+    url.endsWith('/') ||
+    url.includes('/index.html')
+  ) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  if (
+    url.includes('/assets/') ||
+    url.includes('@') ||
+    url.includes('vite') ||
+    url.includes('node_modules') ||
+    url.includes('.tsx') ||
+    url.includes('.ts') ||
+    url.includes('.css') ||
+    url.includes('.js') ||
+    url.includes('localhost') ||
+    url.includes('127.0.0.1')
+  ) {
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((response) => response || fetch(request))
   );
 });

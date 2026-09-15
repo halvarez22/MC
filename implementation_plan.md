@@ -1,9 +1,9 @@
-# implementation_plan.md — Auth: exigir login en cada visita
+# implementation_plan.md — Fix 404 assets en Vercel (SW stale)
 
-**Diagnóstico:** el mock persistía `firebase.auth.user` en `localStorage` → restauraba `admin` sin LoginView.
+**Síntoma:** `index-*.js` / `index-*.css` → 404 tras redeploy.  
+**Causa:** `service-worker.js` precacheaba `/` e `index.html` (cache-first). El HTML viejo pide hashes que ya no existen en `/assets/`.
 
-**Cambio:** sesión solo en `sessionStorage` (+ limpieza de la clave legacy en `localStorage`).
-- Cerrar pestaña / nueva visita → pide login.
-- F5 en la misma pestaña → mantiene sesión (U-First en campo).
-
-**Archivos:** `services/authSessionStore.ts` (nuevo), `firebaseService.ts`, `App.tsx`, `index.tsx`.
+**Fix:**
+1. Bump cache → `afiliados-cache-v2`; no precachear el shell HTML.
+2. Navegación/document → network-first.
+3. `vercel.json`: `Cache-Control: no-cache` para `/`, `index.html` y `service-worker.js`.
