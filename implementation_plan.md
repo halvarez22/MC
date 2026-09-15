@@ -1,233 +1,238 @@
-# APO — Admin lee afiliados cifrados (demo cliente)
+# APO-DEMO-RESET — Limpieza BD + re-captura cliente + prueba cifrado/lectura Admin
 
-**Estado:** 🟢 **APO.1+2 + APO.2.1 formalizado** (commit autorizado 2026-09-15)
+**Estado:** 🟢 **LISTO PARA EJECUCIÓN** (Qwen GO absoluto 2026-09-15 — Opción A)  
+**Artefactos:** `scripts/purge-encrypted-affiliates-demo.mjs` · `AffiliateDetailView` solo envelope  
+**Siguiente (Usuario):** FASE 0 purga → 2 capturas cliente → FASE 2 Console cifrada → FASE 3 Admin plaintext  
 
-### APO.2.1 — Allowlist multi-org + org de sync estable (ex-hotfix)
-
-| Item | Decisión |
-|------|----------|
-| Lectura Admin | `ADMIN_DEFAULT_ORG_ID` coma-separada (solo env server) |
-| Sync write | `VITE_SYNC_ORG_ID` → fallback `org_default` (sin uid como org) |
-| UI | CURP en claro; no mostrar docId `org__blind` como si fuera ciphertext |
-| Datos | Sin borrado Firestore; `org_demo_*` huérfano por KEK rotada pre-APO.2.1 → re-captura |
-| STOP | D.1 / crypto D.2 / autocaptura / Groq OCR intocados |
+**STOP:** Opción B, D.1, D.2 write, Autocaptura, Groq, rotar KEK, endpoint público purge. Sistema congelado para demo.
 
 ---
 
-## 0. Diagnóstico (evidencia)
+## 0. Alcance de “todos los datos” (decisión explícita para Qwen)
 
-| Hecho | Evidencia |
-|-------|-----------|
-| UI «Gestión de Afiliados» muestra Juan/María/Carlos | `firebaseService` mock en memoria |
-| Registros INE/campo «exitosos» van a otra parte | `POST /api/affiliates/secure` → colección `encrypted_affiliates` |
-| Decrypt server-side **ya existe** | `decryptAffiliateRecord` en `cloudEncryptionService.ts` |
-| **Falta** listar por org + API admin + cablear UI | `encryptedAffiliateFirebaseStore` sin `listByOrg` |
+Hoy el sobre cifrado (`AffiliateData` en `cloudEncryptionService`) persiste **solo**:
 
-**Causa raíz:** Strangler incompleto — write D.2b listo; read admin aún en mock legacy. **No es bug de filtros.**
+`fullName`, `curp`, `email`, `phone`, `address`  
+(+ metadatos doc: `created_at`, `org_id`, `blind_curp`, ids de llave — **no** PII).
+
+El OCR INE puede extraer más campos (`sección`, `municipio`, `clave_elector`, etc.) pero **`structuredDataToAffiliatePayload` no los mete al sobre** (`syncAckService.ts`).
+
+| Opción | Qué significa “todos los datos” | ¿Toca D.2 write? | ETA |
+|--------|----------------------------------|------------------|-----|
+| **A — Recomendada demo** | Todo lo **persistido en el envelope actual** (5 campos) + UI Admin que los muestre completos en lista y detalle | **No** (solo UI/ops) | Bajo |
+| **B — Envelope ampliado** | Persistir también campos INE estructurados relevantes en el blob cifrado | **Sí** (schema encrypt + mapper + DTO list) | Medio–alto |
+
+**Propuesta de este plan:** ejecutar **Opción A** para la demo inmediata.  
+Opción B queda como **APO-DEMO-B** diferido (requiere GO aparte; reabre capa write D.2b).
+
+**Narrativa correcta al cliente (SSD):**  
+“Las claves (`CLOUD_KEK_SECRET`) están en el **servidor**. El Admin **autorizado** recibe plaintext vía proxy. El navegador **nunca** tiene la KEK.”
 
 ---
 
 ## 1. Grafo de impacto
 
 ```text
-[WRITE — NO TOCAR en este APO]
-Captura INE → sync → POST /api/affiliates/secure
-  → encryptAffiliateRecord (CLOUD_KEK / CLOUD_BLIND)
-  → saveEncryptedAffiliateUnique → Firestore encrypted_affiliates
+[FASE 0 — OPS BORRADO]
+Firebase Admin / script one-shot
+  → delete collection encrypted_affiliates (solo esta colección)
+  → verificar count=0 en Console
 
-[READ HOY]
-App (role=admin) → AffiliatesView → firebaseService.onAffiliatesSnapshot → MOCK
+[FASE 1 — CLIENTE]
+2 capturas INE reales → sync ACK
+  → POST /api/affiliates/secure
+  → org_id = org_default (VITE_SYNC_ORG_ID / fallback)
+  → KEK actual (Vercel) → 2 docs ciphertext
 
-[READ PROPUESTO]
-App (role=admin + flag)
-  → useEncryptedAffiliatesAdmin
-  → GET /api/affiliates/secure-list  (auth admin)
-      → listEncryptedByOrg(orgId)
-      → decryptAffiliateRecord  (solo server)
-      → DTO plaintext mínimo → AffiliateTable
-  → UX: loading / error / Reintentar / Volver
+[FASE 2 — PRUEBA BD]
+Console Firestore → docs con ciphertext/iv/wrapped_dek/blind_curp
+  → assert: sin nombre/CURP/email en claro
 
-[PRUEBA PARALELA DEMO]
-Consola Firebase → docs raw = ciphertext (sin nombre/CURP en claro)
+[FASE 3 — PRUEBA ADMIN APP]
+Login admin@example.com
+  → GET /api/affiliates/secure-list (Bearer)
+  → decrypt server-side
+  → Lista + Detalle: fullName, curp, email, phone, address (+ createdAt)
+  → assert: count=2, todos los campos del envelope visibles
 ```
 
-| Capa | Archivos | Cambio |
-|------|----------|--------|
-| Store | `services/encryptedAffiliateFirebaseStore.ts` | + `listEncryptedByOrg` |
-| Crypto | `services/cloudEncryptionService.ts` | reutilizar decrypt (sin cambiar algoritmo) |
-| API | `api/affiliates/secure-list.ts` + core | NUEVO list+decrypt |
-| Vite | `vite.config.ts` | proxy local paridad |
-| Flag | `services/featureFlags.ts` + `.env.example` | `VITE_USE_ENCRYPTED_AFFILIATES_ADMIN` |
-| Hook | `hooks/useEncryptedAffiliatesAdmin.ts` | NUEVO |
-| UI | `views/AffiliatesView.tsx` | Strangler condicional |
-| Auth API | env `ADMIN_LIST_SECRET` (demo) → luego Firebase claims | gate obligatorio |
-| Mapper | util / types | `AffiliateData` → `Affiliate` |
-
-**STOP (no tocar):** D.1 purge, autocaptura, Groq OCR/`groq-ine`, PIN dispositivo (`VITE_USE_FIELD_ENCRYPTION`), exponer KEK al browser.
+| Capa | Archivos | ¿Cambio en Opción A? |
+|------|----------|----------------------|
+| Store | `encryptedAffiliateFirebaseStore.ts` | Solo si se añade `purgeEncryptedAffiliatesForDemo` (script/API ops) |
+| Write D.2 | `secureCore`, `cloudEncryptionService`, mapper sync | **STOP — no tocar** |
+| Read Admin | `secureListCore`, hook, `AffiliatesView`, `AffiliateDetailView` | Posible **mejora UX** detalle (mostrar los 5 campos de forma explícita/completa) |
+| OCR / Autocaptura / D.1 purge | — | **STOP** |
+| Env | `ADMIN_DEFAULT_ORG_ID`, `CLOUD_KEK_*`, `VITE_SYNC_ORG_ID` | Verificar; allowlist puede reducirse a `org_default` post-limpieza |
 
 ---
 
-## 2. Modelo de seguridad (SSD / ISO 27034)
+## 2. Fases detalladas
 
-```text
-Browser ──nunca──► CLOUD_KEK_SECRET / CLOUD_BLIND_SECRET / wrapped_dek
-Browser ──auth admin──► API Vercel ──KEK + Admin SDK──► Firestore (ciphertext)
-Admin UI ◄── solo plaintext mínimo tras AuthZ ── API
-```
+### FASE 0 — Purga controlada de BD (ops)
 
-| Regla | Aplicación |
-|-------|------------|
-| Decrypt **solo servidor** | Opción (A). Client-side con `VITE_CLOUD_KEK` = **FORBIDDEN** |
-| AuthZ | List solo si credencial admin válida + `orgId` acotado |
-| Minimización | Response sin `ciphertext`/`iv`/`wrapped_dek` |
-| Multi-tenant | Nunca `listAll` en prod; filtro `org_id == token/org` |
-| Demo | Secret parametrizado `ADMIN_LIST_SECRET` (env); upgrade a Firebase ID token + claims en APO.3 |
+**Objetivo:** colección `encrypted_affiliates` vacía.
 
-**Prueba cliente (guion):**
+**Procedimiento propuesto (elegir uno en GO):**
 
-1. Firebase Console → `encrypted_affiliates` → se ve blob cifrado / `blind_curp` (no PII).  
-2. App como Admin → «Gestión de Afiliados» → nombre, CURP, etc. legibles.  
-3. Sin secret / sin rol admin → API 401/403.
+| Modo | Cómo | Riesgo |
+|------|------|--------|
+| **0.A Console** | Firebase Console → borrar los 3 docs manualmente | Bajo; auditable visualmente |
+| **0.B Script Admin** | Script one-shot `scripts/purge-encrypted-affiliates-demo.mjs` con Admin SA; requiere flag `I_UNDERSTAND=YES` | Bajo si scoped a una colección |
 
----
+**Reglas:**
+- Scope **solo** `encrypted_affiliates` (no tocar Auth users, ni otras colecciones).
+- Log: cantidad borrada, projectId, timestamp.
+- Evidencia: screenshot Console `No documents` / count 0.
+- **Prohibido** borrar desde el browser del Admin UI en esta fase (evita API de delete pública).
 
-## 3. Contratos propuestos
-
-### 3.1 Store
-
-```ts
-listEncryptedByOrg(orgId: string, opts?: { limit?: number }): Promise<EncryptedAffiliateRecord[]>
-```
-
-- Firestore: `where('org_id','==', orgId).limit(n)` (Admin SDK).  
-- Mock: filtrar memory store por `org_id`.
-
-### 3.2 API `GET /api/affiliates/secure-list`
-
-**Headers:** `Authorization: Bearer <ADMIN_LIST_SECRET>` (demo) o Firebase ID token (APO.3).  
-**Query:** `orgId` (requerido, sanitizado).
-
-**200:**
-
-```json
-{
-  "ok": true,
-  "orgId": "org_default",
-  "count": 2,
-  "affiliates": [
-    {
-      "id": "uuid",
-      "fullName": "...",
-      "curp": "...",
-      "email": "...",
-      "phone": "...",
-      "address": "...",
-      "createdAt": "ISO",
-      "blindCurpPrefix": "350ffa57…"
-    }
-  ]
-}
-```
-
-**Errores:** 401 sin auth · 403 org/role · 400 orgId · 500 secrets/Firestore · UI siempre **Reintentar + Volver**.
-
-### 3.3 Flag Strangler
-
-```text
-VITE_USE_ENCRYPTED_AFFILIATES_ADMIN=true   → lista vía API decrypt
-=false (default legacy)                    → mock firebaseService (cero regresión)
-```
-
-### 3.4 Alineación `orgId`
-
-Write sync usa `resolveOrgId()` → suele caer en **`org_default`**.  
-List admin debe usar **el mismo org** (env `VITE_ADMIN_ORG_ID` / `ADMIN_DEFAULT_ORG_ID`, default `org_default`) para que la demo muestre los 2 registros.
+**Criterio de salida FASE 0:** Firestore muestra 0 documentos en `encrypted_affiliates`.
 
 ---
 
-## 4. Fases
+### FASE 1 — Re-captura cliente (2 registros reales)
 
-### APO.1 — Store + API (sin UI grande) — ETA ~1.5–2 h
+**Responsable:** cliente / brigadista en campo.  
+**App:** Production actual (`movimiento.vercel.app`) con sync → `org_default` + KEK vigente.
 
-1. `listEncryptedByOrg` (Admin + mock).  
-2. Core `processSecureAffiliateListRequest` + handler Vercel + proxy Vite.  
-3. Auth mínima: `ADMIN_LIST_SECRET` en Vercel Production.  
-4. Smoke: POST secure → list → plaintext; dump raw ≠ plaintext.  
-5. ESM imports `.js` (mismo patrón que fix OCR).
+**Checklist pre-captura (ops):**
+- [ ] `FIRESTORE_BACKEND=firestore`
+- [ ] `CLOUD_KEK_SECRET` / `CLOUD_BLIND_SECRET` estables (**no rotar** entre captura y demo)
+- [ ] `VITE_SYNC_ORG_ID=org_default` (o vacío → fallback `org_default`)
+- [ ] `ADMIN_DEFAULT_ORG_ID=org_default` (allowlist simple post-limpieza)
+- [ ] `VITE_USE_ENCRYPTED_AFFILIATES_ADMIN=true` + Bearer configurado
 
-### APO.2 — UI Admin Strangler — ETA ~1–1.5 h
-
-1. Flag + hook `useEncryptedAffiliatesAdmin`.  
-2. Cablear `AffiliatesView` (loading / empty / error / Reintentar).  
-3. Mapper a `Affiliate` (campos no cifrados → "—" / placeholders explícitos).  
-4. Banner discreto: «Datos desencriptados vía proxy autorizado».  
-5. **No** reabrir write `saveAffiliate` hacia ciphertext en este APO.
-
-### APO.3 — Auth real + higiene demo — ETA posterior / post-banderazo cliente
-
-1. Firebase Auth + custom claims `role=admin`, `org_id`.  
-2. Validar ID token en API (retirar secret compartido).  
-3. Checklist demo + opcional E2E admin list.  
-4. Retirar `firestore.rules.demo` `read:true` cuando el cliente lo indique.
+**Criterio de salida FASE 1:**
+- 2 ACK exitosos (2xx o 409).
+- Exactamente **2** docs nuevos en Firestore, ambos `org_id == org_default`.
+- Smoke API list (Bearer) → `count: 2` y decrypt OK (sin `decrypt skip`).
 
 ---
 
-## 5. Variables Vercel (añadir en GO)
+### FASE 2 — Demostración “BD solo cifrada”
 
-| Variable | Ámbito | Notas |
-|----------|--------|-------|
-| `ADMIN_LIST_SECRET` | Server Secret | Bearer demo; rotar post-demo |
-| `ADMIN_DEFAULT_ORG_ID` | Config | default `org_default` |
-| `VITE_USE_ENCRYPTED_AFFILIATES_ADMIN` | Build | `true` para demo |
-| `VITE_ADMIN_ORG_ID` | Build | mismo org que sync |
-| Ya existentes | — | `CLOUD_KEK_*`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `FIRESTORE_BACKEND=firestore` |
+**Guion:**
+1. Abrir Firebase → `encrypted_affiliates` → seleccionar cada doc.
+2. Mostrar campos: `ciphertext`, `iv`, `wrapped_dek`, `blind_curp`, `alg=AES-GCM`, `kek_id`.
+3. Buscar (Ctrl+F) nombre/CURP del afiliado en el panel → **no debe aparecer** en claro.
+
+**Criterio de salida:** evidencia screenshot + checklist firmado (cliente/auditor).
+
+**Nota:** Esto **ya lo garantiza** el pipeline D.2b actual si FASE 1 usa el proxy; **no requiere código nuevo** salvo verificación.
 
 ---
 
-## 6. Test plan
+### FASE 3 — Demostración “Admin lee todo lo persistido”
+
+**Guion:**
+1. Login `admin@example.com`.
+2. Banner proxy autorizado + `2 registro(s)`.
+3. Lista: nombre + CURP visibles (no docId monstruo).
+4. Abrir detalle de **cada** afiliado → mostrar **todos** los campos del envelope:
+   - Nombre completo  
+   - CURP  
+   - Email  
+   - Teléfono  
+   - Dirección  
+   - Fecha de registro (`createdAt`)  
+5. (Opcional) DevTools → Network → response JSON **sin** `ciphertext`/`iv`/`wrapped_dek`.
+
+**Gap UX actual (Opción A — posible diff tras GO):**
+- Detalle ya muestra email/teléfono/CURP/dirección; reforzar labels y evitar `—, —` confusos cuando city/state no vienen del envelope (mostrar solo `address` del sobre, no inventar ciudad/CP).
+
+**Criterio de salida:** cliente ve 2/2 afiliados con los 5+1 campos legibles solo en sesión Admin.
+
+---
+
+## 3. Trabajo de ingeniería (solo tras GO)
+
+### Si GO = Opción A (recomendado)
+
+1. **Ops FASE 0** (Console o script scoped) — sin tocar write crypto.  
+2. **APO-DEMO-A.1 (UI):** ajustar `AffiliateDetailView` / mapper para presentar **exactamente** los campos del DTO decrypt (sin placeholders engañosos `—, —` que parezcan datos faltantes cifrados).  
+3. **APO-DEMO-A.2 (ops env):** simplificar `ADMIN_DEFAULT_ORG_ID=org_default` post-purga.  
+4. **Verificación smoke** documentada (T1–T6 abajo).  
+5. Commit/push solo tras evidencia + GO de merge.
+
+### Si GO = Opción B (ampliar envelope)
+
+Plan hijo separado: ampliar `AffiliateData`, mapper OCR→payload, `toDto`, detalle UI, migración N/A (BD vacía tras FASE 0). **Reabre D.2 write** → auditoría Qwen específica obligatoria.
+
+---
+
+## 4. Seguridad / SSD
+
+| Control | Aplicación |
+|---------|------------|
+| KEK / Blind | Solo `process.env` server; nunca `VITE_CLOUD_*` |
+| Delete | No endpoint público de purge; script/Console con confirmación |
+| List Admin | Bearer + allowlist org env (sin query org del cliente) |
+| Minimización respuesta | DTO sin ciphertext/iv/wrapped_dek/key_id |
+| Rotación KEK | **Prohibida** entre FASE 1 y demo |
+
+---
+
+## 5. STOP (inamovible)
+
+- No tocar D.1 purge / Zero-PII device.  
+- No tocar autocaptura INE / Groq OCR (salvo que Opción B lo exija y se apruebe).  
+- No exponer KEK al frontend.  
+- No `listAll` sin filtro `org_id`.  
+- No hotfixes: cualquier hallazgo en FASE 1–3 → **actualizar este plan** y nueva aprobación.
+
+---
+
+## 6. Test plan (evidencia)
 
 | ID | Caso | Esperado |
 |----|------|----------|
-| T1 | Doc en Firestore raw | Solo ciphertext / blind / iv / wrapped_dek |
-| T2 | List sin Bearer | 401 |
-| T3 | List admin org correcta | 200 + N afiliados en claro |
-| T4 | Org distinta | 0 docs o 403 |
-| T5 | Bundle cliente | Sin `CLOUD_KEK` / `CLOUD_BLIND` |
-| T6 | Flag OFF | UI = mock legacy |
-| T7 | Flag ON + red caída | Mensaje + Reintentar + Volver |
-| T8 | E2E D.1 / secure sync existentes | Siguen verdes |
-| T9 | Demo dual pantalla | Console cifrado vs Admin legible |
+| T0 | Post-purga Console | 0 docs |
+| T1 | Tras 2 capturas | 2 docs, `org_id=org_default` |
+| T2 | Doc raw | Solo ciphertext; sin PII clara |
+| T3 | List sin Bearer | 401 |
+| T4 | List Admin | count=2; 5 campos plaintext c/u |
+| T5 | Detalle Admin | mismos campos; sin docId como “dato cifrado” |
+| T6 | Bundle / Network | sin `CLOUD_KEK`; response sin `wrapped_dek` |
 
 ---
 
-## 7. Riesgos y mitigaciones
+## 7. Roles y secuencia temporal
+
+| # | Quién | Acción |
+|---|-------|--------|
+| 1 | Auditor/Usuario | Aprueba este plan (Opción A o B) |
+| 2 | Cursor (tras GO) | FASE 0 + UI A.1 si aplica + env |
+| 3 | Cliente | 2 capturas reales |
+| 4 | Cursor + Usuario | T1–T6 + guion demo |
+| 5 | Usuario | Demo al cliente |
+
+---
+
+## 8. Riesgos
 
 | Riesgo | Mitigación |
 |--------|------------|
-| PII visible en Network tab del Admin | Esperado para rol admin; HTTPS; no logs de body; sesión corta |
-| Secret demo débil | Solo hasta APO.3; no hardcode en repo |
-| orgId desalineado → lista vacía | Parametrizar mismo `org_default` write/read |
-| God-component en AffiliatesView | Lógica en hook/servicio; UI solo estados |
+| Borrar colección equivocada | Script/Console scoped + confirmación explícita |
+| Rotar KEK otra vez | Freeze de secrets hasta fin de demo |
+| Cliente espera campos INE extra no persistidos | Opción A declarada; o GO Opción B |
+| Allowlist multi-org con basura vieja | Tras purge → solo `org_default` |
 
 ---
 
-## 8. Checklist pre-código (Regla 1)
+## 9. Checklist pre-código (Regla 1)
 
-- [x] `implementation_plan.md` con grafo y riesgos  
-- [x] Firmas/contratos documentados  
-- [x] Sin hardcoding de KEK/prompts  
-- [x] UI con Reintentar/Volver (APO.2)  
-- [x] Validación en capa servicio/API  
-- [x] Idempotencia list (GET)  
-- [x] Extracción a hook/servicio (anti-God)  
-- [ ] **GO explícito del usuario/auditor** ← bloqueante
+- [x] Plan con grafo, contratos, riesgos, STOP  
+- [x] Opción A vs B explícita  
+- [ ] **GO Qwen / usuario:** `GO APO-DEMO-RESET Opción A` \| `GO Opción B` \| `Ajustar: …`  
+- [ ] Sin diffs hasta ese GO  
 
 ---
 
-## 9. Decisión solicitada
+## 10. Decisión solicitada
 
-**¿Apruebas GO para ejecutar APO.1 → APO.2** (demo cliente: BD cifrada + Admin lee en claro)?
+Responder con una:
 
-- APO.3 (Firebase Auth claims reales) queda **diferido** hasta banderazo / keys del cliente, salvo que indiques lo contrario.
+1. **`GO APO-DEMO-RESET Opción A`** — purga + re-captura + UI detalle fiel al envelope (recomendado).  
+2. **`GO APO-DEMO-RESET Opción B`** — además ampliar schema cifrado con más campos INE.  
+3. **`Ajustar plan: …`**
 
-**Respuesta esperada:** `GO APO.1+2` | `GO solo APO.1` | `Ajustar plan: …`
+**Sin GO → no se borra BD ni se escribe código.**

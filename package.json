@@ -10,7 +10,8 @@
     "test:e2e": "playwright test",
     "test:e2e:zero-pii": "playwright test e2e/zero-pii-post-ack.spec.ts",
     "spike:cloud-enc": "npx --yes tsx services/cloudEncryptionSpike.ts",
-    "smoke:ine-autocapture": "npx --yes tsx services/ineAutoCaptureSmoke.ts"
+    "smoke:ine-autocapture": "npx --yes tsx services/ineAutoCaptureSmoke.ts",
+    "purge:encrypted-demo": "node scripts/purge-encrypted-affiliates-demo.mjs"
   },
   "dependencies": {
     "firebase": "^11.10.0",
