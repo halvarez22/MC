@@ -9,6 +9,10 @@ import {
   DEFAULT_TIMEOUT_MS,
   processListaNominalRequest,
 } from './api/listaNominalCore';
+import {
+  processSecureAffiliateRequest,
+  type SecureAffiliateBody,
+} from './api/affiliates/secureCore';
 import type { ListaNominalQuery } from './types';
 
 /** Proxy local /api/groq-ine (misma lógica que Vercel) para demos con Vite. */
@@ -139,11 +143,74 @@ function localListaNominalProxy(env: Record<string, string>): Plugin {
   };
 }
 
+/** Proxy local /api/affiliates/secure (D.2b Admin + cifrado; paridad Vercel). */
+function localSecureAffiliateProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'local-secure-affiliate-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url?.split('?')[0];
+        if (url !== '/api/affiliates/secure') {
+          next();
+          return;
+        }
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          res.end();
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          // Propagar env Vite → process para Admin / KEK en el núcleo
+          for (const [k, v] of Object.entries(env)) {
+            if (v && !process.env[k]) process.env[k] = v;
+          }
+
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const body = (raw ? JSON.parse(raw) : {}) as SecureAffiliateBody;
+
+          const result = await processSecureAffiliateRequest(body, {
+            requireCloudSecrets: false,
+          });
+
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result.body));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Proxy local error';
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: message }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
 
   return {
-    plugins: [react(), localGroqIneProxy(env), localListaNominalProxy(env)],
+    plugins: [
+      react(),
+      localGroqIneProxy(env),
+      localListaNominalProxy(env),
+      localSecureAffiliateProxy(env),
+    ],
     server: {
       port: 3000,
       host: '0.0.0.0',

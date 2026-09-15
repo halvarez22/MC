@@ -8,7 +8,9 @@ import {
 } from './services/authSessionStore';
 import { useSyncOffline } from './hooks/useSyncOffline';
 import { useFieldEncryptionLock } from './hooks/useFieldEncryptionLock';
+import { useDrainPendingPurge } from './hooks/useDrainPendingPurge';
 import { clearSessionKeyFromMemory } from './services/fieldEncryptionSession';
+import { installD1E2eHooks } from './services/d1E2eHooks';
 import LoginView from './views/LoginView';
 import Layout from './components/layout/Layout';
 import DashboardView from './views/DashboardView';
@@ -32,6 +34,11 @@ function App() {
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
   useSyncOffline();
+  useDrainPendingPurge();
+
+  useEffect(() => {
+    installD1E2eHooks();
+  }, []);
 
   const {
     ready: pinReady,

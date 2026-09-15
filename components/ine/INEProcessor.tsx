@@ -11,6 +11,7 @@ import {
 } from '../../services/featureFlags';
 import { buildValidateListaNominalAuditEntry } from '../../services/listaNominalAudit';
 import { useListaNominalValidation } from '../../hooks/useListaNominalValidation';
+import { useTrackedObjectUrl } from '../../hooks/useTrackedObjectUrl';
 import { FORCE_INE_SYNC_EVENT } from '../../hooks/useSyncOffline';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
@@ -43,6 +44,9 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
 
   const { isValidating: isLnValidating, lnResult, revalidate: revalidateListaNominal } =
     useListaNominalValidation(structuredData);
+
+  const frontalPreviewUrl = useTrackedObjectUrl(images?.frontal);
+  const posteriorPreviewUrl = useTrackedObjectUrl(images?.posterior);
 
   const enforceListaNominal = isListaNominalEnforceEnabled();
   const blockConfirmHard =
@@ -297,7 +301,7 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
         <div className="text-center">
           <h4 className="font-medium text-gray-900 mb-2">INE Frontal</h4>
           <img
-            src={URL.createObjectURL(images!.frontal)}
+            src={frontalPreviewUrl || ''}
             alt="INE Frontal"
             className="w-full h-32 object-cover rounded-lg border"
           />
@@ -305,7 +309,7 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
         <div className="text-center">
           <h4 className="font-medium text-gray-900 mb-2">INE Posterior</h4>
           <img
-            src={URL.createObjectURL(images!.posterior)}
+            src={posteriorPreviewUrl || ''}
             alt="INE Posterior"
             className="w-full h-32 object-cover rounded-lg border"
           />
@@ -417,7 +421,7 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
           <div className="text-center">
             <h4 className="font-medium text-gray-900 mb-2">INE Frontal</h4>
             <img
-              src={URL.createObjectURL(images!.frontal)}
+              src={frontalPreviewUrl || ''}
               alt="INE Frontal"
               className="w-full h-32 object-cover rounded-lg border"
             />
@@ -425,7 +429,7 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
           <div className="text-center">
             <h4 className="font-medium text-gray-900 mb-2">INE Posterior</h4>
             <img
-              src={URL.createObjectURL(images!.posterior)}
+              src={posteriorPreviewUrl || ''}
               alt="INE Posterior"
               className="w-full h-32 object-cover rounded-lg border"
             />

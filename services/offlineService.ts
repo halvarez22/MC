@@ -2,12 +2,18 @@ import { Affiliate, Document } from '../types';
 import type { EncryptedBlob } from './cryptoService';
 import { isFieldEncryptionEnabled } from './featureFlags';
 import { openString, sealString } from './fieldEncryptionSession';
+import { revokeAllTrackedObjectUrls } from './objectUrlRegistry';
+import { APP_PURGE_COMPLETE_EVENT } from './purgeEvents';
+
+export type OfflineRegistrationStatus = 'open' | 'pending_purge';
 
 export interface OfflineRegistration {
   id: string;
   formData: Omit<Affiliate, 'id' | 'createdAt' | 'documentation' | 'status'>;
   documents: { type: Document['type']; fileName: string; dataUrl: string }[];
   geolocation?: { latitude: number; longitude: number };
+  status?: OfflineRegistrationStatus;
+  syncId?: string;
 }
 
 type StoredDoc = {
@@ -27,6 +33,8 @@ type StoredOfflineRegistration = {
   documents: StoredDoc[];
   geolocation?: { latitude: number; longitude: number };
   fieldEncryption?: boolean;
+  status?: OfflineRegistrationStatus;
+  syncId?: string;
 };
 
 const DB_NAME = 'afiliadosDB';
@@ -118,6 +126,8 @@ async function openRegistration(
     formData,
     documents,
     geolocation: stored.geolocation,
+    status: stored.status,
+    syncId: stored.syncId,
   };
 }
 
@@ -144,13 +154,71 @@ export const offlineService = {
       request.onsuccess = async () => {
         try {
           const stored = request.result as StoredOfflineRegistration[];
-          const opened = await Promise.all(stored.map(openRegistration));
+          const opened = await Promise.all(
+            stored
+              .filter((row) => row.status !== 'pending_purge')
+              .map(openRegistration)
+          );
           resolve(opened);
         } catch (err) {
           reject(err);
         }
       };
       request.onerror = () => reject('Fallo al recuperar registros pendientes.');
+    });
+  },
+
+  /** D.1 — Tombstone tras ACK. */
+  markForLocalPurge: async (id: string, syncId: string): Promise<void> => {
+    if (!syncId) throw new Error('markForLocalPurge requiere syncId de ACK válido');
+    const db = await getDB();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.get(id);
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const row = request.result as StoredOfflineRegistration | undefined;
+        if (!row) {
+          resolve();
+          return;
+        }
+        row.status = 'pending_purge';
+        row.syncId = syncId;
+        store.put(row);
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  },
+
+  /** D.1 — delete físico + revoke + evento. */
+  executeLocalPurge: async (id: string): Promise<void> => {
+    revokeAllTrackedObjectUrls();
+    const db = await getDB();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    transaction.objectStore(STORE_NAME).delete(id);
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(APP_PURGE_COMPLETE_EVENT, { detail: { registrationId: id } })
+      );
+    }
+  },
+
+  listPendingPurgeIds: async (): Promise<string[]> => {
+    const db = await getDB();
+    const transaction = db.transaction(STORE_NAME, 'readonly');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.getAll();
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => {
+        const rows = request.result as StoredOfflineRegistration[];
+        resolve(rows.filter((r) => r.status === 'pending_purge').map((r) => r.id));
+      };
+      request.onerror = () => reject(request.error);
     });
   },
 

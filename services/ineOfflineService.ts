@@ -2,10 +2,16 @@
 // Usa IndexedDB para almacenar datos sin conexión
 // DB_VERSION 2: imageDataFrontal + imageDataPosterior (migración graceful)
 // C.2: encrypt-at-write / decrypt-at-read detrás de VITE_USE_FIELD_ENCRYPTION
+// D.1: tombstone pending_purge + executeLocalPurge (delete físico)
 
 import type { EncryptedBlob } from './cryptoService';
 import { isFieldEncryptionEnabled } from './featureFlags';
 import { openJson, openString, sealJson, sealString } from './fieldEncryptionSession';
+import { revokeAllTrackedObjectUrls } from './objectUrlRegistry';
+import { APP_PURGE_COMPLETE_EVENT } from './purgeEvents';
+
+export { APP_PURGE_COMPLETE_EVENT };
+export type PendingINEStatus = 'open' | 'pending_purge';
 
 /** Forma pública (siempre plaintext hacia la app). */
 export interface PendingINE {
@@ -13,6 +19,9 @@ export interface PendingINE {
   rawText: string;
   capturedAt: string;
   processed?: boolean;
+  /** D.1 tombstone tras ACK válido. */
+  status?: PendingINEStatus;
+  syncId?: string;
   structuredData?: unknown;
   /** @deprecated usar imageDataFrontal */
   imageData?: string;
@@ -26,6 +35,8 @@ type StoredPendingINE = {
   rawText: string | EncryptedBlob;
   capturedAt: string;
   processed?: boolean;
+  status?: PendingINEStatus;
+  syncId?: string;
   structuredData?: unknown;
   imageData?: string | EncryptedBlob;
   imageDataFrontal?: string | EncryptedBlob | null;
@@ -110,6 +121,8 @@ async function decryptPending(stored: StoredPendingINE): Promise<PendingINE> {
     rawText,
     capturedAt: stored.capturedAt,
     processed: stored.processed,
+    status: stored.status,
+    syncId: stored.syncId,
     structuredData: structuredData ?? undefined,
     imageData: imageDataFrontal || undefined,
     imageDataFrontal: imageDataFrontal || null,
@@ -174,7 +187,71 @@ export const getPendingInes = async (): Promise<PendingINE[]> => {
 
 export const getUnprocessedInes = async (): Promise<PendingINE[]> => {
   const all = await getPendingInes();
-  return all.filter((ine) => ine.processed !== true);
+  return all.filter(
+    (ine) => ine.processed !== true && ine.status !== 'pending_purge'
+  );
+};
+
+/**
+ * D.1 — Tombstone tras ACK 2xx+id. No borra aún (resiliencia ante cierre abrupto).
+ */
+export const markForLocalPurge = async (
+  id: string,
+  syncId: string
+): Promise<void> => {
+  if (!syncId) {
+    throw new Error('markForLocalPurge requiere syncId de ACK válido');
+  }
+  const db = await openDB();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+
+  const request = store.get(id);
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => {
+      const ine = request.result as StoredPendingINE | undefined;
+      if (!ine) {
+        resolve();
+        return;
+      }
+      ine.status = 'pending_purge';
+      ine.syncId = syncId;
+      ine.processed = true;
+      store.put(ine);
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+};
+
+/**
+ * D.1 — Purga física: revoke Object URLs + delete row + evento global.
+ * Si falla a mitad, el tombstone permanece para reintento (hook arranque = siguiente GO).
+ */
+export const executeLocalPurge = async (id: string): Promise<void> => {
+  revokeAllTrackedObjectUrls();
+
+  const db = await openDB();
+  const transaction = db.transaction(STORE_NAME, 'readwrite');
+  const store = transaction.objectStore(STORE_NAME);
+  store.delete(id);
+
+  await new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(APP_PURGE_COMPLETE_EVENT, { detail: { pendingId: id } })
+    );
+  }
+};
+
+/** IDs marcados pending_purge (para drenaje en arranque — aún no cableado). */
+export const listPendingPurgeIds = async (): Promise<string[]> => {
+  const all = await getPendingInes();
+  return all.filter((ine) => ine.status === 'pending_purge').map((ine) => ine.id);
 };
 
 export const markINEAsProcessed = async (
@@ -203,8 +280,8 @@ export const markINEAsProcessed = async (
 };
 
 /**
- * Limpieza post-sync (C.2): elimina fotos y rawText; conserva metadatos mínimos.
- * U-First: el caller debe capturar errores y no bloquear al usuario.
+ * @deprecated D.1 — preferir markForLocalPurge + executeLocalPurge (borra PII completo).
+ * Conservado por compatibilidad; solo nullifica imágenes/rawText.
  */
 export const deleteSensitiveData = async (id: string): Promise<void> => {
   const db = await openDB();
@@ -219,7 +296,6 @@ export const deleteSensitiveData = async (id: string): Promise<void> => {
     ine.imageData = undefined;
     ine.imageDataFrontal = null;
     ine.imageDataPosterior = null;
-    // structuredData: se conserva cifrado/claro para auditoría local mínima
     store.put(ine);
   };
 

@@ -3,6 +3,11 @@
  * Extraído de INEProcessor — Anti-God-Component (Regla 3) + Zero Trust (Regla 5).
  */
 
+import {
+  createTrackedObjectUrl,
+  revokeTrackedObjectUrl,
+} from './objectUrlRegistry';
+
 export const IMAGE_PREPROCESS_CONFIG = {
   brightness: 20,
   contrast: 1.5,
@@ -89,7 +94,9 @@ export const preprocessImageForOCR = (
     }
 
     const img = new Image();
+    const objectUrl = createTrackedObjectUrl(file);
     img.onload = () => {
+      revokeTrackedObjectUrl(objectUrl);
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
@@ -222,7 +229,10 @@ export const preprocessImageForOCR = (
       );
     };
 
-    img.onerror = () => reject(new Error('Error cargando imagen'));
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      revokeTrackedObjectUrl(objectUrl);
+      reject(new Error('Error cargando imagen'));
+    };
+    img.src = objectUrl;
   });
 };

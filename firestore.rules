@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Defensa en profundidad (Opción A: escrituras solo Admin SDK / bypass).
+    // Lecturas cliente: multi-tenant por custom claim org_id.
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function callerOrgId() {
+      return request.auth.token.org_id;
+    }
+
+    function sameOrgOnResource() {
+      return signedIn()
+        && 'org_id' in resource.data
+        && resource.data.org_id == callerOrgId();
+    }
+
+    function sameOrgOnCreate() {
+      return signedIn()
+        && 'org_id' in request.resource.data
+        && request.resource.data.org_id == callerOrgId();
+    }
+
+    match /encrypted_affiliates/{docId} {
+      // create: request.resource (doc aún no existe)
+      allow create: if sameOrgOnCreate()
+        && request.resource.data.keys().hasAll([
+          'org_id', 'blind_curp', 'ciphertext', 'iv', 'wrapped_dek',
+          'key_id', 'enc_v', 'alg'
+        ])
+        && request.resource.data.enc_v is int
+        && request.resource.data.blind_curp is string
+        && request.resource.data.blind_curp.size() == 64;
+
+      // get/list/update/delete: resource (doc existente)
+      allow get, list: if sameOrgOnResource();
+      allow update: if sameOrgOnResource() && sameOrgOnCreate()
+        && request.resource.data.org_id == resource.data.org_id
+        && request.resource.data.blind_curp == resource.data.blind_curp;
+      allow delete: if sameOrgOnResource();
+    }
+  }
+}

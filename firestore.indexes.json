@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "encrypted_affiliates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "org_id", "order": "ASCENDING" },
+        { "fieldPath": "blind_curp", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

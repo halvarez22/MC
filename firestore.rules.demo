@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// DEMO URGENTE — movimiento-15317
+// Escrituras del API con SDK cliente (sin custom claims) SOLO en encrypted_affiliates.
+// Tras la demo: desplegar firestore.rules (estricto) + preferir Admin SDK.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /encrypted_affiliates/{docId} {
+      allow read: if true;
+      allow create: if
+        request.resource.data.keys().hasAll([
+          'org_id', 'blind_curp', 'ciphertext', 'iv', 'wrapped_dek',
+          'key_id', 'enc_v', 'alg'
+        ])
+        && request.resource.data.blind_curp is string
+        && request.resource.data.blind_curp.size() == 64;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

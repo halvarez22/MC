@@ -9,11 +9,16 @@ import {
   markINEAsProcessed,
   getINEStats,
   repairCorruptedInes,
-  deleteSensitiveData,
+  markForLocalPurge,
+  executeLocalPurge,
 } from '../services/ineOfflineService';
 import { groqService } from '../services/groqService';
 import { groqVisionService } from '../services/groqVisionService';
 import { isGroqVisionEnabled } from '../services/featureFlags';
+import {
+  acknowledgeIneSync,
+  isValidSyncAck,
+} from '../services/syncAckService';
 
 /** Evento para forzar sync desde UI desacoplada (p. ej. botón en INEProcessor). */
 export const FORCE_INE_SYNC_EVENT = 'forceINESync';
@@ -21,17 +26,6 @@ export const FORCE_INE_SYNC_EVENT = 'forceINESync';
 export const useSyncOffline = () => {
   const syncingRef = useRef(false);
   const inFlightIdsRef = useRef<Set<string>>(new Set());
-
-  const sendToBackend = useCallback(async (structuredData: unknown): Promise<boolean> => {
-    try {
-      console.log('Enviando al backend:', structuredData);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return true;
-    } catch (error) {
-      console.error('Error enviando al backend:', error);
-      return false;
-    }
-  }, []);
 
   const processSingleINE = useCallback(async (ine: {
     id: string;
@@ -54,7 +48,6 @@ export const useSyncOffline = () => {
       const frontal = ine.imageDataFrontal || ine.imageData;
       const posterior = ine.imageDataPosterior;
 
-      // Flag ON + imágenes → visión vía proxy; else texto LLM legado
       if (isGroqVisionEnabled() && frontal) {
         console.log(`🚀 Sync visión proxy para ${ine.id}`);
         structuredData = await groqVisionService.extractIneFromBase64(
@@ -68,20 +61,26 @@ export const useSyncOffline = () => {
       await markINEAsProcessed(ine.id, structuredData);
 
       if (navigator.onLine) {
-        const success = await sendToBackend(structuredData);
-        if (success) {
-          console.log(`✅ INE ${ine.id} procesada y enviada al backend`);
+        // D.2b: POST /api/affiliates/secure — ACK 2xx|409 → purga; 5xx/red → no purgar
+        const ack = await acknowledgeIneSync(structuredData);
+        if (isValidSyncAck(ack)) {
+          console.log(
+            `✅ INE ${ine.id} ACK ${ack.status} syncId=${ack.syncId} affiliateId=${ack.affiliateId}`
+          );
           try {
-            await deleteSensitiveData(ine.id);
-            console.log(`🧹 Datos sensibles locales eliminados para ${ine.id}`);
+            await markForLocalPurge(ine.id, ack.syncId);
+            await executeLocalPurge(ine.id);
+            console.log(`🧹 Purga local completada para ${ine.id}`);
           } catch (cleanErr) {
             console.warn(
-              `⚠️ Limpieza post-sync falló para ${ine.id} — reintentar más tarde:`,
+              `⚠️ Purga post-ACK falló para ${ine.id} — queda pending_purge:`,
               cleanErr
             );
           }
         } else {
-          console.warn(`⚠️ INE ${ine.id} procesada pero no enviada al backend`);
+          console.warn(
+            `⚠️ INE ${ine.id} sin ACK válido (status=${ack.status}): ${'error' in ack ? ack.error : ''}`
+          );
         }
       }
 
@@ -92,7 +91,7 @@ export const useSyncOffline = () => {
     } finally {
       inFlightIdsRef.current.delete(ine.id);
     }
-  }, [sendToBackend]);
+  }, []);
 
   const syncPendingInes = useCallback(async () => {
     if (!navigator.onLine) {

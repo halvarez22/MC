@@ -1,24 +1,38 @@
-// En una aplicación real, importarías esto desde el SDK de Firebase
-// import { initializeApp } from "firebase/app";
-// import { getAuth } from "firebase/auth";
-// import { getFirestore } from "firebase/firestore";
+/**
+ * Firebase client — proyecto demo movimiento-15317.
+ * Config vía import.meta.env (VITE_FIREBASE_*). Sin hardcode de negocio en UI.
+ */
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
-// Configuración simulada de Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSy...-mock-key",
-  authDomain: "mock-project.firebaseapp.com",
-  projectId: "mock-project",
-  storageBucket: "mock-project.appspot.com",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abcdef123456"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID as string,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID as string,
 };
 
-// En una aplicación real, inicializarías Firebase aquí.
-// const app = initializeApp(firebaseConfig);
-// export const auth = getAuth(app);
-// export const db = getFirestore(app);
+function assertConfig(): void {
+  const missing = Object.entries(firebaseConfig)
+    .filter(([, v]) => !v || String(v).includes('undefined'))
+    .map(([k]) => k);
+  if (missing.length) {
+    console.warn(
+      `[firebase] Faltan VITE_FIREBASE_* (${missing.join(', ')}). Revisá .env`
+    );
+  }
+}
 
-// Para este proyecto, solo exportaremos objetos simulados.
-// La lógica real estará en firebaseService.ts
-export const auth = {};
-export const db = {};
+assertConfig();
+
+export const app: FirebaseApp = getApps().length
+  ? getApps()[0]!
+  : initializeApp(firebaseConfig);
+
+export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);
+
+export { firebaseConfig };
