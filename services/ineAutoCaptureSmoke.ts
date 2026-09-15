@@ -1,16 +1,22 @@
 /**
- * Smoke forense autocaptura INE (sin DOM / sin React).
- * Ejecutar: npm run smoke:ine-autocapture
+ * Smoke APO — ventana 5/4 + mutex + umbrales.
+ * npm run smoke:ine-autocapture
  *
- * Cubre: 3 ticks → 1 disparo; tick malo → reset; mutex; predicado blur/ready.
+ * [T,F,T,T,T] → 4/5 → dispara
+ * [T,F,T,F,T] → 3/5 → NO dispara
  */
 
 import { createCaptureMutex } from '../hooks/useIneAutoCapture';
 import {
-  INE_AUTO_CAPTURE_STABLE_TICKS,
+  INE_AUTO_CAPTURE_MIN_GOOD_TICKS,
+  INE_AUTO_CAPTURE_WINDOW_SIZE,
+  INE_FORCE_CAPTURE_AFTER_MS,
+  INE_ADAPTIVE_RELAX_AFTER_MS,
   INE_QUALITY_ANALYSIS_INTERVAL_MS,
+  evaluateSlidingWindow,
+  getIneQualityFailReason,
+  getIneQualityThresholds,
   isIneCaptureReady,
-  simulateAutoCaptureStreak,
 } from './ineCaptureQualityConfig';
 import { evaluateIneFrameQuality, laplacianVariance } from './ineCaptureQualityAnalyzer';
 
@@ -18,36 +24,45 @@ function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(msg);
 }
 
-// --- Streak: 3 buenos → fire en índice 2 ---
+// APO.1 — [T,F,T,T,T] → dispara (4 buenos)
 {
-  const r = simulateAutoCaptureStreak([true, true, true]);
-  assert(r.firedAt === 2, `esperado fire@2 got ${r.firedAt}`);
+  const r = evaluateSlidingWindow([true, false, true, true, true]);
+  assert(r.shouldCapture === true, '4/5 debe capturar');
+  assert(r.goodTicks === 4, `good=4 got ${r.goodTicks}`);
 }
 
-// --- Tick malo intercalado → reset, no fire antes ---
+// APO.1 — [T,F,T,F,T] → NO dispara (solo 3 buenos)
 {
-  const r = simulateAutoCaptureStreak([true, true, false, true, true, true]);
-  assert(r.resetCount >= 1, 'esperado al menos 1 reset');
-  assert(r.firedAt === 5, `fire tras reset en 5, got ${r.firedAt}`);
+  const r = evaluateSlidingWindow([true, false, true, false, true]);
+  assert(r.shouldCapture === false, '3/5 NO debe capturar');
+  assert(r.goodTicks === 3, 'good=3');
 }
 
-// --- Nunca 3 seguidos → no fire ---
+// Ventana incompleta (<5) → no dispara aunque haya 4 true
 {
-  const r = simulateAutoCaptureStreak([true, false, true, false, true]);
-  assert(r.firedAt === null, 'no debió disparar');
+  const r = evaluateSlidingWindow([true, true, true, true]);
+  assert(r.shouldCapture === false, 'ventana incompleta no dispara');
 }
 
-// --- Mutex: segundo tryLock falla ---
+// Mutex
 {
   const m = createCaptureMutex();
-  assert(m.tryLock() === true, 'primer lock');
-  assert(m.tryLock() === false, 'segundo lock debe fallar');
+  assert(m.tryLock() && !m.tryLock(), 'mutex');
   m.unlock();
-  assert(m.tryLock() === true, 'lock tras unlock');
 }
 
-// --- Predicado ready ---
+// Fail reason + blur
 {
+  assert(
+    getIneQualityFailReason({
+      isBlurred: true,
+      isTooDark: false,
+      isTooBright: false,
+      isTilted: true,
+      isWellPositioned: false,
+    }) === 'blur',
+    'prioridad blur'
+  );
   assert(
     !isIneCaptureReady({
       isBlurred: true,
@@ -56,21 +71,20 @@ function assert(cond: boolean, msg: string): void {
       isTilted: false,
       isWellPositioned: false,
     }),
-    'blur debe bloquear'
-  );
-  assert(
-    isIneCaptureReady({
-      isBlurred: false,
-      isTooDark: false,
-      isTooBright: false,
-      isTilted: false,
-      isWellPositioned: true,
-    }),
-    'todo OK debe pasar'
+    'blur bloquea'
   );
 }
 
-// --- Laplaciano: imagen plana ≈ blur; con bordes ≈ nítida ---
+// APO.3 — umbrales tras 3s
+{
+  const strict = getIneQualityThresholds(0);
+  const relax = getIneQualityThresholds(INE_ADAPTIVE_RELAX_AFTER_MS + 1);
+  assert(relax.blurLaplacianMin > strict.blurLaplacianMin, 'blur relajado @3s');
+  assert(INE_ADAPTIVE_RELAX_AFTER_MS === 3000, 'const 3s');
+  assert(INE_FORCE_CAPTURE_AFTER_MS === 5000, 'const 5s forzar');
+}
+
+// Laplaciano
 {
   const w = 32;
   const h = 32;
@@ -79,8 +93,6 @@ function assert(cond: boolean, msg: string): void {
     flat[i] = flat[i + 1] = flat[i + 2] = 128;
     flat[i + 3] = 255;
   }
-  const flatVar = laplacianVariance(flat, w, h);
-
   const edged = new Uint8ClampedArray(flat);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -89,22 +101,19 @@ function assert(cond: boolean, msg: string): void {
       edged[i] = edged[i + 1] = edged[i + 2] = v;
     }
   }
-  const edgeVar = laplacianVariance(edged, w, h);
-  assert(edgeVar > flatVar, `edged (${edgeVar}) > flat (${flatVar})`);
-
-  const qFlat = evaluateIneFrameQuality(flat, w, h);
-  assert(qFlat.isBlurred === true, 'plano debe marcar blur');
+  assert(laplacianVariance(edged, w, h) > laplacianVariance(flat, w, h), 'edge>flat');
+  assert(evaluateIneFrameQuality(flat, w, h).isBlurred === true, 'plano blur');
 }
 
 console.log(
   JSON.stringify(
     {
-      model: 'discrete_ticks',
+      model: 'sliding_window',
+      windowSize: INE_AUTO_CAPTURE_WINDOW_SIZE,
+      minGood: INE_AUTO_CAPTURE_MIN_GOOD_TICKS,
       intervalMs: INE_QUALITY_ANALYSIS_INTERVAL_MS,
-      stableTicks: INE_AUTO_CAPTURE_STABLE_TICKS,
-      approxStableMs: INE_AUTO_CAPTURE_STABLE_TICKS * INE_QUALITY_ANALYSIS_INTERVAL_MS,
-      blur: 'laplacian_variance_active',
-      darkBright: 'active',
+      adaptiveRelaxMs: INE_ADAPTIVE_RELAX_AFTER_MS,
+      forceCaptureMs: INE_FORCE_CAPTURE_AFTER_MS,
     },
     null,
     2

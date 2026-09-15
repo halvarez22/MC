@@ -7,15 +7,20 @@ import {
   useIneAutoCapture,
 } from '../../hooks/useIneAutoCapture';
 import {
-  INE_AUTO_CAPTURE_STABLE_TICKS,
+  INE_AUTO_CAPTURE_WINDOW_SIZE,
   INE_CAPTURE_JPEG_QUALITY,
+  INE_FORCE_CAPTURE_AFTER_MS,
   INE_QUALITY_ANALYSIS_HEIGHT,
   INE_QUALITY_ANALYSIS_INTERVAL_MS,
   INE_QUALITY_ANALYSIS_WIDTH,
+  failReasonLabel,
+  getIneQualityFailReason,
+  getIneQualityThresholds,
   isIneCaptureReady,
   type IneImageQualityFlags,
 } from '../../services/ineCaptureQualityConfig';
 import { evaluateIneFrameQuality } from '../../services/ineCaptureQualityAnalyzer';
+import { playShutterSound, unlockShutterAudio } from '../../services/cameraShutterSound';
 
 interface INECaptureProps {
   onImagesCaptured: (images: { frontal: File; posterior: File }) => void;
@@ -37,11 +42,13 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   const [currentStep, setCurrentStep] = useState<CaptureStep>('frontal');
   const [frontalImage, setFrontalImage] = useState<File | null>(null);
   const [posteriorImage, setPosteriorImage] = useState<File | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [, setStream] = useState<MediaStream | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState<string>('');
   const [imageQuality, setImageQuality] = useState<IneImageQualityFlags>(INITIAL_QUALITY);
+  const [attemptStartedAt, setAttemptStartedAt] = useState(() => Date.now());
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,6 +57,8 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   const mutexRef = useRef(createCaptureMutex());
   const currentStepRef = useRef(currentStep);
   currentStepRef.current = currentStep;
+  const attemptStartedAtRef = useRef(attemptStartedAt);
+  attemptStartedAtRef.current = attemptStartedAt;
 
   const frontalPreviewUrl = useTrackedObjectUrl(frontalImage);
   const posteriorPreviewUrl = useTrackedObjectUrl(posteriorImage);
@@ -74,6 +83,7 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
     }
 
     let isMounted = true;
+    setAttemptStartedAt(Date.now());
 
     const startCamera = async () => {
       try {
@@ -130,14 +140,20 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
     };
   }, [privacyAccepted, currentStep, stopStream]);
 
-  // Cleanup al desmontar
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  // Análisis de calidad en vivo
+  // Reloj para forzar captura / umbrales adaptativos
+  useEffect(() => {
+    if (currentStep === 'preview' || !privacyAccepted) return;
+    const id = setInterval(() => setNowTs(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [currentStep, privacyAccepted]);
+
+  // Análisis de calidad en vivo (umbrales adaptativos APO.3)
   useEffect(() => {
     if (!privacyAccepted) return;
     if (currentStep === 'preview' || isCapturing) return;
@@ -155,8 +171,10 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const timeTrying = Date.now() - attemptStartedAtRef.current;
+      const thresholds = getIneQualityThresholds(timeTrying);
       setImageQuality(
-        evaluateIneFrameQuality(imageData.data, canvas.width, canvas.height)
+        evaluateIneFrameQuality(imageData.data, canvas.width, canvas.height, thresholds)
       );
     };
 
@@ -165,9 +183,11 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
     return () => clearInterval(interval);
   }, [currentStep, privacyAccepted, isCapturing]);
 
-  const captureImage = useCallback(() => {
-    if (!isIneCaptureReady(imageQuality)) {
-      alert('La imagen no tiene buena calidad. Corrige los problemas mostrados antes de capturar.');
+  const captureImage = useCallback((opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+
+    if (!force && !isIneCaptureReady(imageQuality)) {
+      alert('La imagen no tiene buena calidad. Corrige los problemas mostrados o espera Forzar captura.');
       mutexRef.current.unlock();
       return;
     }
@@ -177,12 +197,12 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
       return;
     }
 
-    // Mutex compartido auto/manual
     if (!mutexRef.current.isLocked() && !mutexRef.current.tryLock()) {
       return;
     }
 
     setIsCapturing(true);
+    void playShutterSound();
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -219,7 +239,6 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
         }
 
         setIsCapturing(false);
-        // El efecto de cámara detiene/reinicia el stream al cambiar currentStep
       },
       'image/jpeg',
       INE_CAPTURE_JPEG_QUALITY
@@ -233,10 +252,10 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
     !error &&
     !isCapturing;
 
-  const { stableCount } = useIneAutoCapture({
+  const { goodTicks, windowFilled } = useIneAutoCapture({
     enabled: autoCaptureEnabled,
     quality: imageQuality,
-    onAutoCapture: captureImage,
+    onAutoCapture: () => captureImage({ force: false }),
     mutex: mutexRef.current,
   });
 
@@ -262,6 +281,34 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
   };
 
   const qualityOk = isIneCaptureReady(imageQuality);
+  const failReason = getIneQualityFailReason(imageQuality);
+  const timeTrying = nowTs - attemptStartedAt;
+  const showForceCapture =
+    timeTrying >= INE_FORCE_CAPTURE_AFTER_MS && !isCapturing && !isLoading && !error;
+
+  const renderQualityBadge = () => {
+    if (isCapturing) {
+      return (
+        <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">Capturando…</div>
+      );
+    }
+    if (qualityOk) {
+      return (
+        <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+          Estable {goodTicks}/{INE_AUTO_CAPTURE_WINDOW_SIZE}
+          {windowFilled < INE_AUTO_CAPTURE_WINDOW_SIZE ? '…' : ''}
+        </div>
+      );
+    }
+    const label = failReasonLabel(failReason);
+    const color =
+      failReason === 'blur'
+        ? 'bg-red-500'
+        : failReason === 'tilt'
+          ? 'bg-orange-500'
+          : 'bg-yellow-500';
+    return <div className={`${color} text-white text-xs px-2 py-1 rounded-full`}>{label}</div>;
+  };
 
   const renderCameraView = () => (
     <div className="space-y-6">
@@ -301,43 +348,12 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
                 </div>
               </div>
 
-              <div className="absolute top-4 right-4 space-y-2">
-                {imageQuality.isBlurred && (
-                  <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">Borroso</div>
-                )}
-                {imageQuality.isTooDark && (
-                  <div className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">
-                    Muy oscuro
-                  </div>
-                )}
-                {imageQuality.isTooBright && (
-                  <div className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">
-                    Muy brillante
-                  </div>
-                )}
-                {imageQuality.isTilted && (
-                  <div className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full">
-                    Inclinado
-                  </div>
-                )}
-                {qualityOk && !isCapturing && (
-                  <div className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                    {stableCount > 0
-                      ? `Estable ${stableCount}/${INE_AUTO_CAPTURE_STABLE_TICKS}`
-                      : 'Imagen buena'}
-                  </div>
-                )}
-                {isCapturing && (
-                  <div className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                    Capturando…
-                  </div>
-                )}
-              </div>
+              <div className="absolute top-4 right-4 space-y-2">{renderQualityBadge()}</div>
 
               <div className="absolute bottom-4 left-4 right-4">
                 <div className="bg-black bg-opacity-70 text-white text-xs p-3 rounded-lg">
-                  No toques la pantalla: al estabilizar el ángulo se captura automáticamente.
-                  Puedes usar Capturar solo si el auto no dispara.
+                  Endereza el INE (horizontal en el marco) y espera el sonido de captura.
+                  Tras unos segundos puedes forzar si hay reflejos.
                 </div>
               </div>
             </div>
@@ -345,23 +361,38 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
         )}
       </div>
 
-      <div className="flex gap-4 justify-center">
+      <div className="flex flex-wrap gap-3 justify-center">
         <Button onClick={onCancel} variant="secondary">
           Cancelar
         </Button>
         <Button
           onClick={() => {
             if (!mutexRef.current.tryLock()) return;
-            captureImage();
+            captureImage({ force: false });
           }}
-          disabled={
-            isLoading || !!error || isCapturing || !qualityOk
-          }
+          disabled={isLoading || !!error || isCapturing || !qualityOk}
           className="min-w-[120px]"
         >
           Capturar
         </Button>
+        {showForceCapture && (
+          <Button
+            onClick={() => {
+              if (!mutexRef.current.tryLock()) return;
+              captureImage({ force: true });
+            }}
+            disabled={isLoading || !!error || isCapturing}
+            className="min-w-[160px] bg-amber-600 hover:bg-amber-700"
+          >
+            Forzar captura
+          </Button>
+        )}
       </div>
+      {showForceCapture && (
+        <p className="text-center text-amber-700 text-sm">
+          Calidad subóptima posible — úsalo solo si no logra estabilizar.
+        </p>
+      )}
     </div>
   );
 
@@ -425,7 +456,10 @@ const INECapture: React.FC<INECaptureProps> = ({ onImagesCaptured, onCancel }) =
     <>
       <PrivacyConsentModal
         isOpen={!privacyAccepted}
-        onAccept={() => setPrivacyAccepted(true)}
+                    onAccept={() => {
+                      void unlockShutterAudio();
+                      setPrivacyAccepted(true);
+                    }}
         onCancel={onCancel}
       />
 

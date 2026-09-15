@@ -1,10 +1,12 @@
 /**
- * Autocaptura INE: N ticks estables con calidad OK → un solo disparo (mutex).
+ * Autocaptura INE — ventana deslizante (APO.1) + mutex.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  INE_AUTO_CAPTURE_STABLE_TICKS,
+  INE_AUTO_CAPTURE_MIN_GOOD_TICKS,
+  INE_AUTO_CAPTURE_WINDOW_SIZE,
+  evaluateSlidingWindow,
   isIneCaptureReady,
   type IneImageQualityFlags,
 } from '../services/ineCaptureQualityConfig';
@@ -37,7 +39,8 @@ export type UseIneAutoCaptureOptions = {
   quality: IneImageQualityFlags;
   onAutoCapture: () => void;
   mutex: CaptureMutex;
-  stableTicks?: number;
+  windowSize?: number;
+  minGoodTicks?: number;
 };
 
 export function useIneAutoCapture({
@@ -45,38 +48,46 @@ export function useIneAutoCapture({
   quality,
   onAutoCapture,
   mutex,
-  stableTicks = INE_AUTO_CAPTURE_STABLE_TICKS,
-}: UseIneAutoCaptureOptions): { stableCount: number } {
-  const [stableCount, setStableCount] = useState(0);
+  windowSize = INE_AUTO_CAPTURE_WINDOW_SIZE,
+  minGoodTicks = INE_AUTO_CAPTURE_MIN_GOOD_TICKS,
+}: UseIneAutoCaptureOptions): { goodTicks: number; windowFilled: number } {
+  const [goodTicks, setGoodTicks] = useState(0);
+  const [windowFilled, setWindowFilled] = useState(0);
+  const historyRef = useRef<boolean[]>([]);
   const onAutoCaptureRef = useRef(onAutoCapture);
   onAutoCaptureRef.current = onAutoCapture;
   const firedRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) {
-      setStableCount(0);
+      historyRef.current = [];
+      setGoodTicks(0);
+      setWindowFilled(0);
       firedRef.current = false;
       return;
     }
 
     if (mutex.isLocked() || firedRef.current) return;
 
-    if (isIneCaptureReady(quality)) {
-      setStableCount((prev) => prev + 1);
-    } else {
-      setStableCount(0);
+    const ready = isIneCaptureReady(quality);
+    historyRef.current = [...historyRef.current, ready].slice(-windowSize);
+    const { shouldCapture, goodTicks: good, window } = evaluateSlidingWindow(
+      historyRef.current,
+      windowSize,
+      minGoodTicks
+    );
+    setGoodTicks(good);
+    setWindowFilled(window.length);
+
+    if (shouldCapture) {
+      if (!mutex.tryLock()) return;
+      firedRef.current = true;
+      historyRef.current = [];
+      setGoodTicks(0);
+      setWindowFilled(0);
+      onAutoCaptureRef.current();
     }
-  }, [enabled, quality, mutex]);
+  }, [enabled, quality, mutex, windowSize, minGoodTicks]);
 
-  useEffect(() => {
-    if (!enabled || firedRef.current || mutex.isLocked()) return;
-    if (stableCount < stableTicks) return;
-
-    if (!mutex.tryLock()) return;
-    firedRef.current = true;
-    setStableCount(0);
-    onAutoCaptureRef.current();
-  }, [stableCount, stableTicks, enabled, mutex]);
-
-  return { stableCount: Math.min(stableCount, stableTicks) };
+  return { goodTicks, windowFilled };
 }

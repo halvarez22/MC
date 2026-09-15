@@ -1,17 +1,13 @@
 /**
- * Análisis de frame INE (canvas ImageData) — usable desde UI y smoke.
+ * Análisis de frame INE — umbrales inyectables (APO.3 adaptativo).
  */
 
 import {
-  INE_BLUR_LAPLACIAN_VARIANCE_MIN,
-  INE_BRIGHT_AVG_BRIGHTNESS_MIN,
-  INE_DARK_AVG_BRIGHTNESS_MAX,
-  INE_TILT_EDGE_RATIO_MAX,
-  INE_TILT_EDGE_RATIO_MIN,
+  getIneQualityThresholds,
   type IneImageQualityFlags,
+  type IneQualityThresholds,
 } from './ineCaptureQualityConfig';
 
-/** Varianza Laplaciano 3×3 simplificado (muestreo) — proxy de nitidez. */
 export function laplacianVariance(data: Uint8ClampedArray, width: number, height: number): number {
   let sum = 0;
   let sumSq = 0;
@@ -39,7 +35,8 @@ export function laplacianVariance(data: Uint8ClampedArray, width: number, height
 export function evaluateIneFrameQuality(
   data: Uint8ClampedArray,
   width: number,
-  height: number
+  height: number,
+  thresholds: IneQualityThresholds = getIneQualityThresholds(0)
 ): IneImageQualityFlags {
   let totalBrightness = 0;
   let samples = 0;
@@ -69,13 +66,12 @@ export function evaluateIneFrameQuality(
     }
   }
   const edgeRatio = verticalEdges > 0 ? horizontalEdges / verticalEdges : 1;
-  const isTilted =
-    edgeRatio > INE_TILT_EDGE_RATIO_MAX || edgeRatio < INE_TILT_EDGE_RATIO_MIN;
+  const isTilted = edgeRatio > thresholds.tiltMax || edgeRatio < thresholds.tiltMin;
 
   const lapVar = laplacianVariance(data, width, height);
-  const isBlurred = lapVar < INE_BLUR_LAPLACIAN_VARIANCE_MIN;
-  const isTooDark = avgBrightness > 0 && avgBrightness < INE_DARK_AVG_BRIGHTNESS_MAX;
-  const isTooBright = avgBrightness > INE_BRIGHT_AVG_BRIGHTNESS_MIN;
+  const isBlurred = lapVar < thresholds.blurLaplacianMin;
+  const isTooDark = avgBrightness > 0 && avgBrightness < thresholds.darkAvgMax;
+  const isTooBright = avgBrightness > thresholds.brightAvgMin;
   const hasDocumentFeatures = avgBrightness > 0 && stdDev > 0;
 
   return {
@@ -83,6 +79,7 @@ export function evaluateIneFrameQuality(
     isTooDark,
     isTooBright,
     isTilted,
-    isWellPositioned: hasDocumentFeatures && !isTilted && !isTooDark && !isTooBright && !isBlurred,
+    isWellPositioned:
+      hasDocumentFeatures && !isTilted && !isTooDark && !isTooBright && !isBlurred,
   };
 }
