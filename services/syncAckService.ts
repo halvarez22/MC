@@ -43,7 +43,7 @@ export function structuredDataToAffiliatePayload(structuredData: unknown): {
   address: string;
 } {
   const o = asRecord(structuredData);
-  const curp = String(o.curp || o.CURP || '').trim();
+  const curp = String(o.curp || o.CURP || '').trim().toUpperCase();
   return {
     fullName: String(o.nombre_completo || o.fullName || o.nombre || 'SIN_NOMBRE').trim(),
     curp,
@@ -51,6 +51,46 @@ export function structuredDataToAffiliatePayload(structuredData: unknown): {
     phone: String(o.phone || o.telefono || '0000000000').trim(),
     address: String(o.address || o.domicilio || 'SIN_DOMICILIO').trim(),
   };
+}
+
+/**
+ * APO-FIELD-PERSIST: form Modo Campo → payload para POST /api/affiliates/secure.
+ * Preferir CURP de INE; address compuesto desde domicilio normalizado OCR-MAP.
+ */
+export function fieldFormToSecureSyncInput(input: {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  curp?: string;
+  orgId?: string;
+}): Record<string, unknown> {
+  const addressParts = [input.address, input.city, input.state, input.zip]
+    .map((p) => String(p || '').trim())
+    .filter(Boolean);
+  return {
+    fullName: String(input.fullName || '').trim(),
+    nombre_completo: String(input.fullName || '').trim(),
+    curp: String(input.curp || '').trim().toUpperCase(),
+    email: String(input.email || '').trim() || 'noreply@local.invalid',
+    phone: String(input.phone || '').trim() || '0000000000',
+    address: addressParts.join(', ') || 'SIN_DOMICILIO',
+    domicilio: addressParts.join(', ') || 'SIN_DOMICILIO',
+    ...(input.orgId?.trim() ? { orgId: input.orgId.trim() } : {}),
+  };
+}
+
+/**
+ * Persistencia cifrada desde Modo Campo.
+ * 201 y 409 (duplicado) → ACK válido vía isValidSyncAck.
+ */
+export async function syncFieldAffiliate(
+  input: Parameters<typeof fieldFormToSecureSyncInput>[0]
+): Promise<SyncAck> {
+  return acknowledgeIneSync(fieldFormToSecureSyncInput(input));
 }
 
 function resolveOrgId(structuredData: unknown): string {

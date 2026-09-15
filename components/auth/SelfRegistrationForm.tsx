@@ -3,16 +3,32 @@ import { Affiliate, Document, User, INEStructuredData } from '../../types';
 import { firebaseService } from '../../services/firebaseService';
 import { offlineService, OfflineRegistration } from '../../services/offlineService';
 import { emailService } from '../../services/emailService';
+import {
+  isValidSyncAck,
+  syncFieldAffiliate,
+} from '../../services/syncAckService';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import PrivacyNoticeBody from '../legal/PrivacyNoticeBody';
 import { MEXICAN_STATES, ICONS } from '../../constants';
 import INEProcessor from '../ine/INEProcessor';
-import { mapIneStructuredToFormAddress } from '../../services/ineFieldNormalization';
+import {
+  isCurpPersistable,
+  mapIneStructuredToFormAddress,
+} from '../../services/ineFieldNormalization';
+
+/** Resultado de persistencia Modo Campo (APO-FIELD-PERSIST). */
+export type FieldPersistResult = {
+  isOffline: boolean;
+  userRegistered?: boolean;
+  affiliateId?: string;
+  /** HTTP 409 — CURP ya en bóveda; operativo = éxito */
+  duplicate?: boolean;
+};
 
 interface SelfRegistrationFormProps {
-  onSuccess: (isOffline: boolean, userRegistered?: boolean) => void;
+  onSuccess: (result: FieldPersistResult) => void;
   isFieldMode?: boolean;
   fieldUser?: User;
 }
@@ -178,6 +194,17 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
             return;
         }
 
+        const curpCandidate = String(ineData?.curp || '').trim().toUpperCase();
+        if (isFieldMode) {
+            const curpGate = isCurpPersistable(curpCandidate);
+            if (!curpGate.isValid) {
+                setError(
+                    `CURP requerido para guardar (${curpGate.reason}). Revisa la captura INE y corrige el CURP.`
+                );
+                return;
+            }
+        }
+
         if (isFieldMode && !geolocation) {
              if (!confirm("No se ha capturado la geolocalización. ¿Deseas continuar de todas formas?")) {
                  return;
@@ -188,9 +215,12 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
 
         try {
             let affiliateData: Affiliate;
+            let persistResult: FieldPersistResult = {
+                isOffline: isFieldMode && !navigator.onLine,
+            };
 
             if (isFieldMode && !navigator.onLine) {
-                // --- MODO OFFLINE ---
+                // --- MODO OFFLINE (F.3): solo IndexedDB; sync nube pendiente ---
                 const documentsWithData = await Promise.all(
                     DOCUMENT_TYPES.map(async type => ({
                         type,
@@ -209,7 +239,6 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                 await offlineService.saveRegistration(offlineReg);
                 window.dispatchEvent(new CustomEvent('forceOfflineIndicatorUpdate'));
 
-                // Crear objeto affiliate para el registro de usuario
                 affiliateData = {
                     id: offlineReg.id,
                     createdAt: new Date().toISOString(),
@@ -239,36 +268,93 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                     latitude: geolocation?.latitude,
                     longitude: geolocation?.longitude
                 };
+                persistResult = { isOffline: true, affiliateId: offlineReg.id };
 
+            } else if (isFieldMode) {
+                // --- F.1: Modo Campo ONLINE → POST /api/affiliates/secure ---
+                const ack = await syncFieldAffiliate({
+                    fullName: formData.fullName,
+                    email: formData.email,
+                    phone: formData.phone,
+                    address: formData.address,
+                    city: formData.city,
+                    state: formData.state,
+                    zip: formData.zip,
+                    curp: curpCandidate,
+                });
+
+                // 201 y 409 (duplicado) = éxito operativo (dato seguro en bóveda)
+                if (!isValidSyncAck(ack)) {
+                    setError(
+                        ack.ok === false
+                            ? `${ack.error}. Puedes reintentar.`
+                            : 'No se pudo confirmar el guardado cifrado. Reintenta.'
+                    );
+                    return;
+                }
+
+                affiliateData = {
+                    id: ack.affiliateId,
+                    createdAt: new Date().toISOString(),
+                    ...formData,
+                    status: 'activo' as const,
+                    documentation: DOCUMENT_TYPES.map(type => ({
+                        id: `${type}_${Date.now()}`,
+                        type,
+                        status: 'pending' as const,
+                        fileName: uploadedFiles[type]?.name || type,
+                    })),
+                    ineData: ineData
+                        ? {
+                              name: ineData.nombre_completo || '',
+                              address: ineData.domicilio || '',
+                              voterId: ineData.clave_elector || '',
+                              curp: ineData.curp || '',
+                              registrationYear: '',
+                              state: ineData.estado || '',
+                              municipality: ineData.municipio || '',
+                              section: ineData.seccion || '',
+                              locality: ineData.localidad || '',
+                              emission: ineData.fecha_emision || '',
+                              validity: ineData.fecha_vigencia || '',
+                              extractedAt: new Date().toISOString(),
+                              confidence: 0.8,
+                          }
+                        : undefined,
+                    latitude: geolocation?.latitude,
+                    longitude: geolocation?.longitude,
+                };
+                persistResult = {
+                    isOffline: false,
+                    affiliateId: ack.affiliateId,
+                    duplicate: ack.status === 409,
+                };
             } else {
-                // --- MODO ONLINE ---
+                // --- Auto-registro público (legacy mock; fuera de APO-FIELD-PERSIST) ---
                 const documentsToUpload = DOCUMENT_TYPES.map(type => ({
                     type,
                     fileName: uploadedFiles[type]!.name
-                    // En una app real, aquí se subiría el archivo a un storage y se obtendría una URL
                 }));
 
                 affiliateData = await firebaseService.registerAffiliate(formData, documentsToUpload, geolocation || undefined);
+                persistResult = { isOffline: false, affiliateId: affiliateData.id };
             }
 
-            // Si se proporcionó email, registrar usuario en la app y enviar email
+            // Email/cuenta: best-effort; no invalida persistencia cifrada
+            let didRegisterUser = false;
             if (formData.email) {
-                const userRegistered = await registerUserInApp(affiliateData);
-                if (userRegistered) {
-                    // Intentar enviar email de bienvenida (no crítico si falla)
+                didRegisterUser = await registerUserInApp(affiliateData);
+                if (didRegisterUser) {
                     try {
                         await sendWelcomeEmail(formData.email, formData.fullName, affiliateData.id);
-                        console.log('✅ Email de bienvenida enviado');
                     } catch (emailError) {
-                        console.warn('⚠️ No se pudo enviar email de bienvenida, pero el registro fue exitoso:', emailError);
+                        console.warn('⚠️ Email de bienvenida no enviado:', emailError);
                     }
-                } else {
-                    console.warn('⚠️ No se pudo registrar usuario en la app, pero el afiliado fue registrado');
                 }
             }
 
             resetForm();
-            onSuccess(!navigator.onLine, userRegistered);
+            onSuccess({ ...persistResult, userRegistered: didRegisterUser });
 
         } catch (err: any) {
             setError(err.message || 'Ocurrió un error durante el registro.');
@@ -435,7 +521,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                     type="submit"
                     isLoading={isLoading}
                     className="w-full md:w-auto"
-                    disabled={(!ineData && isFieldMode) || !acceptedPrivacy}
+                    disabled={isLoading || (!ineData && isFieldMode) || !acceptedPrivacy}
                 >
                     {isFieldMode ? 'Registrar Afiliado' : 'Enviar Registro'}
                 </Button>

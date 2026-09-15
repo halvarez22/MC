@@ -172,7 +172,7 @@ function curpCheckDigit(base17: string): string {
 
 /**
  * Validación CURP (longitud + charset + dígito verificador).
- * Solo para WARNING — nunca bloquear el flujo.
+ * Checksum = WARNING no bloqueante en UI de revisión.
  */
 export function validateCurpChecksum(curp: string | undefined | null): CurpValidation {
   if (curp == null || !String(curp).trim()) {
@@ -191,6 +191,24 @@ export function validateCurpChecksum(curp: string | undefined | null): CurpValid
       isValid: false,
       reason: 'El dígito verificador del CURP no coincide (revisa OCR)',
     };
+  }
+  return { isValid: true };
+}
+
+/**
+ * CURP mínimo para persistencia cifrada (formato).
+ * Bloquea vacío / longitud / charset. El dígito verificador NO bloquea (OCR-MAP).
+ */
+export function isCurpPersistable(curp: string | undefined | null): CurpValidation {
+  if (curp == null || !String(curp).trim()) {
+    return { isValid: false, reason: 'CURP vacío' };
+  }
+  const c = String(curp).trim().toUpperCase().replace(/\s+/g, '');
+  if (c.length !== 18) {
+    return { isValid: false, reason: `Longitud ${c.length} (se esperan 18)` };
+  }
+  if (!/^[A-Z0-9Ñ]{18}$/.test(c)) {
+    return { isValid: false, reason: 'Caracteres no válidos en CURP' };
   }
   return { isValid: true };
 }
