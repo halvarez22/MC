@@ -20,6 +20,8 @@ export type SyncAckFailure = {
 export type SyncAck = SyncAckSuccess | SyncAckFailure;
 
 const SECURE_SYNC_PATH = '/api/affiliates/secure';
+/** Timeout cliente para no dejar el brigadista en spinner infinito (APO-FIELD-HANG). */
+const SECURE_SYNC_TIMEOUT_MS = 25_000;
 
 function newId(prefix: string): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') {
@@ -131,11 +133,15 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
 
   const orgId = resolveOrgId(structuredData);
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SECURE_SYNC_TIMEOUT_MS);
+
   try {
     const res = await fetch(SECURE_SYNC_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orgId, payload }),
+      signal: controller.signal,
     });
 
     let body: {
@@ -175,8 +181,17 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
       error: body.error || `ACK rechazado HTTP ${res.status}`,
     };
   } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return {
+        ok: false,
+        status: 0,
+        error: `Tiempo de espera agotado (${SECURE_SYNC_TIMEOUT_MS / 1000}s). Reintenta.`,
+      };
+    }
     const message = err instanceof Error ? err.message : 'Error de red';
     return { ok: false, status: 0, error: message };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

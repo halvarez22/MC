@@ -1,4 +1,4 @@
-const CACHE_NAME = 'afiliados-cache-v2';
+const CACHE_NAME = 'afiliados-cache-v3';
 // No precachear index.html ni `/`: tras un redeploy Vite cambia los hashes
 // de /assets/* y un HTML viejo en caché provoca 404 en JS/CSS.
 const URLS_TO_CACHE = [
@@ -39,6 +39,16 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = request.url;
+
+  // APO-FIELD-HANG: APIs siempre red directa (POST /api/* no debe pasar por Cache).
+  try {
+    const path = new URL(url).pathname;
+    if (path.startsWith('/api/')) {
+      return;
+    }
+  } catch {
+    /* ignore bad URL */
+  }
 
   // Shell SPA: siempre red (evita HTML con hashes obsoletos tras redeploy).
   if (

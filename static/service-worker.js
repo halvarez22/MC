@@ -1,4 +1,4 @@
-const CACHE_NAME = 'afiliados-cache-v2';
+const CACHE_NAME = 'afiliados-cache-v3';
 // Mirror de public/service-worker.js (Vite sirve public/ → dist).
 const URLS_TO_CACHE = [
   '/manifest.json',
@@ -31,6 +31,16 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = request.url;
+
+  // APO-FIELD-HANG: APIs siempre red directa (POST /api/* no debe pasar por Cache).
+  try {
+    const path = new URL(url).pathname;
+    if (path.startsWith('/api/')) {
+      return;
+    }
+  } catch {
+    /* ignore bad URL */
+  }
 
   if (
     request.mode === 'navigate' ||

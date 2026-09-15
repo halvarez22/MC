@@ -68,6 +68,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
     const [userRegistered, setUserRegistered] = useState(false);
     const [acceptedPrivacy, setAcceptedPrivacy] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+    const [allowSubmitWithoutGeo, setAllowSubmitWithoutGeo] = useState(false);
 
     const resetForm = () => {
         setFormData(initialFormData);
@@ -80,6 +81,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
         setUserRegistered(false);
         setAcceptedPrivacy(false);
         setShowINEProcessor(false);
+        setAllowSubmitWithoutGeo(false);
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -160,18 +162,21 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
     };
 
     const registerUserInApp = async (affiliateData: Affiliate) => {
+        // createUser no existe en firebaseService (mock legacy) — no bloquear campo.
+        if (typeof (firebaseService as { createUser?: unknown }).createUser !== 'function') {
+            return false;
+        }
         try {
-            // Crear un usuario en la app con rol de simpatizante
             const userData = {
                 email: affiliateData.email,
                 role: 'simpatizante' as const,
                 fullName: affiliateData.fullName,
                 state: affiliateData.state,
                 city: affiliateData.city,
-                requiresPasswordChange: true, // Requiere cambiar contraseña en primer login
+                requiresPasswordChange: true,
             };
 
-            await firebaseService.createUser(userData);
+            await (firebaseService as { createUser: (u: unknown) => Promise<unknown> }).createUser(userData);
             setUserRegistered(true);
             return true;
         } catch (error) {
@@ -205,10 +210,11 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
             }
         }
 
-        if (isFieldMode && !geolocation) {
-             if (!confirm("No se ha capturado la geolocalización. ¿Deseas continuar de todas formas?")) {
-                 return;
-             }
+        if (isFieldMode && !geolocation && !allowSubmitWithoutGeo) {
+            setError(
+                'No se ha capturado la geolocalización. Captúrala o pulsa “Continuar sin ubicación”.'
+            );
+            return;
         }
 
         setIsLoading(true);
@@ -220,7 +226,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
             };
 
             if (isFieldMode && !navigator.onLine) {
-                // --- MODO OFFLINE (F.3): solo IndexedDB; sync nube pendiente ---
+                // --- MODO OFFLINE (F.3): solo IndexedDB; sync pendiente ---
                 const documentsWithData = await Promise.all(
                     DOCUMENT_TYPES.map(async type => ({
                         type,
@@ -340,9 +346,9 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                 persistResult = { isOffline: false, affiliateId: affiliateData.id };
             }
 
-            // Email/cuenta: best-effort; no invalida persistencia cifrada
+            // Email/cuenta: best-effort; no bloquea persistencia cifrada (campo prioriza ACK)
             let didRegisterUser = false;
-            if (formData.email) {
+            if (formData.email && !isFieldMode) {
                 didRegisterUser = await registerUserInApp(affiliateData);
                 if (didRegisterUser) {
                     try {
@@ -447,7 +453,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                 <div className="pt-4 border-t">
                     <h4 className="text-lg font-medium text-gray-800 dark:text-white mb-2">Geolocalización</h4>
                     <div className="flex items-center gap-4 flex-wrap">
-                        <Button type="button" variant="secondary" onClick={handleGetLocation}>
+                        <Button type="button" variant="secondary" onClick={handleGetLocation} disabled={isLoading}>
                              <span className="mr-2">{ICONS.gps}</span>
                              Capturar Ubicación Actual
                         </Button>
@@ -463,6 +469,24 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                         )}
                     </div>
                     {locationMessage && <p className={`text-sm mt-2 ${locationMessage.includes('éxito') ? 'text-green-600 dark:text-green-300' : 'text-gray-600 dark:text-gray-300'}`}>{locationMessage}</p>}
+                    {!geolocation && (
+                        <button
+                            type="button"
+                            className="mt-3 text-sm text-primary underline font-medium disabled:opacity-50"
+                            disabled={isLoading}
+                            onClick={() => {
+                                setAllowSubmitWithoutGeo(true);
+                                setError(null);
+                            }}
+                        >
+                            Continuar sin ubicación
+                        </button>
+                    )}
+                    {allowSubmitWithoutGeo && !geolocation && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                            Registrarás sin coordenadas GPS.
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -491,6 +515,11 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
             </div>
 
             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            {isLoading && isFieldMode && (
+                <p className="text-sm text-center text-gray-600 dark:text-gray-300" role="status">
+                    Guardando cifrado… espera un momento.
+                </p>
+            )}
 
             <div className="pt-2">
                 <label className="flex items-start gap-3 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
