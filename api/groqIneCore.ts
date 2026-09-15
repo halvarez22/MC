@@ -14,21 +14,30 @@ export const INE_VISION_PROMPT = `Eres un extractor de datos de credenciales INE
 Analiza las imágenes (frontal y, si existe, posterior) y devuelve SOLO un objeto JSON válido con este esquema:
 {
   "nombre_completo": string opcional,
-  "curp": string opcional (18 caracteres),
-  "clave_elector": string opcional (18 caracteres),
+  "curp": string opcional (exactamente 18 caracteres alfanuméricos),
+  "clave_elector": string opcional (exactamente 18 caracteres),
   "fecha_nacimiento": string opcional,
   "fecha_emision": string opcional,
   "fecha_vigencia": string opcional,
-  "domicilio": string opcional,
+  "domicilio": string opcional (domicilio completo en una línea),
+  "domicilio_lineas": string opcional (texto de domicilio como en la INE, puede incluir COL, CP, ciudad),
+  "codigo_postal": string opcional (5 dígitos si aparecen en el domicilio),
   "seccion": string opcional,
-  "municipio": string opcional,
-  "estado": string opcional,
+  "municipio": string opcional (legacy: nombre preferido; si solo hay código, el código),
+  "municipio_codigo": string opcional (2-3 dígitos INE, ej. "020"),
+  "municipio_nombre": string opcional (nombre del municipio, ej. "León"),
+  "estado": string opcional (legacy: nombre preferido o código),
+  "estado_codigo": string opcional (2 dígitos INE, ej. "11"),
+  "estado_nombre": string opcional (nombre oficial, ej. "Guanajuato"),
   "localidad": string opcional,
   "cic": string opcional (9 dígitos),
   "ocr_credencial": string opcional (13 dígitos),
   "raw_ocr_text": string opcional con texto legible concatenado
 }
 Analiza el reverso de la credencial. Si existe una línea de lectura mecánica (MRZ) que comienza con "IDMEX", extrae los 9 dígitos siguientes como "cic" y los 13 dígitos siguientes al símbolo "<<" como "ocr_credencial". Si no son legibles, omítelos (no inventes datos).
+Para CURP y clave_elector: copia carácter por carácter; no confundas O/0, I/1, A/M, 5/6, 8/9. Cruza la fecha de nacimiento impresa con las posiciones de fecha del CURP cuando sea posible.
+Si el domicilio muestra un código postal de 5 dígitos, rellénalo en "codigo_postal".
+Si ves códigos ESTODO/MUNICIPIO numéricos, rellénalos en estado_codigo/municipio_codigo Y, si el nombre de ciudad/estado es legible en el domicilio (ej. LEON, GTO), rellena estado_nombre/municipio_nombre.
 Reglas: omitir campos no visibles; no inventar; CURP/clave exactos si se leen; solo JSON.`;
 
 export type GroqIneBody = {

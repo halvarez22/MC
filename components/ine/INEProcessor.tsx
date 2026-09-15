@@ -15,6 +15,10 @@ import { useTrackedObjectUrl } from '../../hooks/useTrackedObjectUrl';
 import { FORCE_INE_SYNC_EVENT } from '../../hooks/useSyncOffline';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import {
+  looksLikeIneMunicipioCode,
+  validateCurpChecksum,
+} from '../../services/ineFieldNormalization';
 
 interface INEProcessorProps {
   onDataExtracted: (data: INEStructuredData, images: { frontal: File; posterior: File }) => void;
@@ -504,6 +508,19 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
                 isMonospace={true}
               />
 
+              {(() => {
+                const curpRaw = (isEditing && editedData ? editedData.curp : data.curp) || '';
+                const curpCheck = validateCurpChecksum(curpRaw);
+                if (!curpRaw.trim() || curpCheck.isValid) return null;
+                return (
+                  <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                    ⚠️ El CURP detectado parece tener un error de formato
+                    {curpCheck.reason ? ` (${curpCheck.reason})` : ''}. Por favor, corrígelo
+                    manualmente.
+                  </div>
+                );
+              })()}
+
               <EditableDataField
                 label="Clave de Elector"
                 value={isEditing && editedData ? editedData.clave_elector : data.clave_elector}
@@ -548,6 +565,20 @@ const INEProcessor: React.FC<INEProcessorProps> = ({ onDataExtracted, onCancel }
                 isEditing={isEditing}
                 onChange={(value) => updateEditedField('municipio', value)}
               />
+
+              {(() => {
+                const mun =
+                  (isEditing && editedData ? editedData.municipio : data.municipio) ||
+                  data.municipio_codigo ||
+                  '';
+                if (!looksLikeIneMunicipioCode(mun)) return null;
+                return (
+                  <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                    ⚠️ Código de municipio detectado ({mun}). Verifica la ciudad en el formulario
+                    (no uses el código como nombre de ciudad).
+                  </div>
+                );
+              })()}
 
               <EditableDataField
                 label="Sección"

@@ -54,10 +54,18 @@ export interface INEStructuredData {
   fecha_emision?: string;
   fecha_vigencia?: string;
   domicilio?: string;
+  /** APO-OCR-MAP: domicilio multilínea como en INE. */
+  domicilio_lineas?: string;
+  /** APO-OCR-MAP: CP 5 dígitos si visible. */
+  codigo_postal?: string;
   clave_elector?: string;
   seccion?: string;
   municipio?: string;
+  municipio_codigo?: string;
+  municipio_nombre?: string;
   estado?: string;
+  estado_codigo?: string;
+  estado_nombre?: string;
   localidad?: string;
   /** Campos para Lista Nominal (Fase 3+; opcionales hasta extracción MRZ). */
   modelo_credencial?: IneCredentialModel;

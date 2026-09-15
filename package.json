@@ -11,6 +11,7 @@
     "test:e2e:zero-pii": "playwright test e2e/zero-pii-post-ack.spec.ts",
     "spike:cloud-enc": "npx --yes tsx services/cloudEncryptionSpike.ts",
     "smoke:ine-autocapture": "npx --yes tsx services/ineAutoCaptureSmoke.ts",
+    "smoke:ine-ocr-map": "npx --yes tsx services/ineOcrMapSmoke.ts",
     "purge:encrypted-demo": "node scripts/purge-encrypted-affiliates-demo.mjs"
   },
   "dependencies": {

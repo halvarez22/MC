@@ -9,6 +9,7 @@ import Modal from '../ui/Modal';
 import PrivacyNoticeBody from '../legal/PrivacyNoticeBody';
 import { MEXICAN_STATES, ICONS } from '../../constants';
 import INEProcessor from '../ine/INEProcessor';
+import { mapIneStructuredToFormAddress } from '../../services/ineFieldNormalization';
 
 interface SelfRegistrationFormProps {
   onSuccess: (isOffline: boolean, userRegistered?: boolean) => void;
@@ -32,7 +33,7 @@ const initialFormData: Omit<Affiliate, 'id' | 'createdAt' | 'documentation' | 's
     phone: '',
     address: '',
     city: '',
-    state: MEXICAN_STATES[0],
+    state: '',
     zip: '',
 };
 
@@ -109,14 +110,16 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
         setIneData(data);
         setIneImages(images);
 
-        // Auto-llenar el formulario con los datos extraídos del INE
+        const mapped = mapIneStructuredToFormAddress(data);
+
+        // Auto-llenar el formulario con datos INE normalizados (APO-OCR-MAP)
         setFormData(prev => ({
             ...prev,
             fullName: data.nombre_completo || prev.fullName,
-            address: data.domicilio || prev.address,
-            state: data.estado || prev.state,
-            city: data.municipio || prev.city,
-            zip: prev.zip, // No tenemos código postal en INE
+            address: mapped.address || prev.address,
+            state: mapped.state || '',
+            city: mapped.city || '',
+            zip: mapped.zip || prev.zip,
         }));
 
         // Auto-llenar los archivos de documentos
@@ -347,6 +350,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                         required
                         className="mt-1 block w-full pl-3 pr-10 py-3 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md min-h-[44px]"
                     >
+                        <option value="">Seleccione estado</option>
                         {MEXICAN_STATES.map(state => <option key={state} value={state}>{state}</option>)}
                     </select>
                 </div>

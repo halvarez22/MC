@@ -1,238 +1,207 @@
-# APO-DEMO-RESET — Limpieza BD + re-captura cliente + prueba cifrado/lectura Admin
+# APO-OCR-MAP — Precisión CURP/clave + domicilio → formulario Modo Campo
 
-**Estado:** 🟢 **LISTO PARA EJECUCIÓN** (Qwen GO absoluto 2026-09-15 — Opción A)  
-**Artefactos:** `scripts/purge-encrypted-affiliates-demo.mjs` · `AffiliateDetailView` solo envelope  
-**Siguiente (Usuario):** FASE 0 purga → 2 capturas cliente → FASE 2 Console cifrada → FASE 3 Admin plaintext  
+**Estado:** 🟢 **IMPLEMENTADO M.1–M.5 — pendiente auditoría final / merge** (Qwen GO 2026-09-15)  
+**Smoke:** `npm run smoke:ine-ocr-map` → **SPIKE PASS** (Héctor: Guanajuato, 37510, city≠020, CURP warning)  
+**STOP:** M.6 envelope, D.1, D.2 write, Autocaptura. CURP checksum = warning no bloqueo.
 
-**STOP:** Opción B, D.1, D.2 write, Autocaptura, Groq, rotar KEK, endpoint público purge. Sistema congelado para demo.
+**Objetivo:**  
+1. Reducir errores de **CURP** y **clave de elector**.  
+2. Que **Dirección / Ciudad / Estado / CP** se rellenen desde el INE sin fricción innecesaria del brigadista (siempre editables como red de seguridad).
+
+**Relación con APO-DEMO-RESET:** Este APO es **post-demo / paralelo**; **no** bloquea el guion cifrado BD↔Admin (Opción A). No ampliar envelope nube aquí salvo GO explícito (ver §4).
 
 ---
 
-## 0. Alcance de “todos los datos” (decisión explícita para Qwen)
+## 0. Evidencia forense (caso Héctor)
 
-Hoy el sobre cifrado (`AffiliateData` en `cloudEncryptionService`) persiste **solo**:
+| Campo | INE (foto) | OCR app |
+|--------|------------|---------|
+| CURP | `AAGH650922HGTLTC04` | `AGMH690922HGTCTL04` |
+| Clave elector | `ALGTHC65092211H100` | `ALGTHC6509221H1H00` |
+| Domicilio | C PARQUE VIA 324 / COL PARQUE MANZANARES **37510** / **LEÓN, GTO.** | Parcial sin CP/ciudad |
+| Municipio / Estado INE | códigos `020` / `11` | Ciudad=`020`, Estado=`Aguascalientes` (default) |
 
-`fullName`, `curp`, `email`, `phone`, `address`  
-(+ metadatos doc: `created_at`, `org_id`, `blind_curp`, ids de llave — **no** PII).
+**Causas raíz (código actual):**
 
-El OCR INE puede extraer más campos (`sección`, `municipio`, `clave_elector`, etc.) pero **`structuredDataToAffiliatePayload` no los mete al sobre** (`syncAckService.ts`).
-
-| Opción | Qué significa “todos los datos” | ¿Toca D.2 write? | ETA |
-|--------|----------------------------------|------------------|-----|
-| **A — Recomendada demo** | Todo lo **persistido en el envelope actual** (5 campos) + UI Admin que los muestre completos en lista y detalle | **No** (solo UI/ops) | Bajo |
-| **B — Envelope ampliado** | Persistir también campos INE estructurados relevantes en el blob cifrado | **Sí** (schema encrypt + mapper + DTO list) | Medio–alto |
-
-**Propuesta de este plan:** ejecutar **Opción A** para la demo inmediata.  
-Opción B queda como **APO-DEMO-B** diferido (requiere GO aparte; reabre capa write D.2b).
-
-**Narrativa correcta al cliente (SSD):**  
-“Las claves (`CLOUD_KEK_SECRET`) están en el **servidor**. El Admin **autorizado** recibe plaintext vía proxy. El navegador **nunca** tiene la KEK.”
+1. **CURP/clave:** error de Vision/LLM en lectura; no hay post-validación cruzada (MRZ / dígitos CURP / coherencia fecha). Edición manual solo en `INEProcessor`.  
+2. **Ciudad/Estado:** `SelfRegistrationForm.handleINEDataExtracted` mapea `municipio`→`city` y `estado`→`state` **sin normalizar** códigos INE → nombres. El `<select>` exige exactamente un valor de `MEXICAN_STATES`; `"11"` / `"GTO"` no matchean → queda `MEXICAN_STATES[0]` = Aguascalientes.  
+3. **CP:** no hay extracción al form (comentario histórico “no tenemos CP”); el CP **sí** está en el domicilio impreso.
 
 ---
 
 ## 1. Grafo de impacto
 
 ```text
-[FASE 0 — OPS BORRADO]
-Firebase Admin / script one-shot
-  → delete collection encrypted_affiliates (solo esta colección)
-  → verificar count=0 en Console
-
-[FASE 1 — CLIENTE]
-2 capturas INE reales → sync ACK
-  → POST /api/affiliates/secure
-  → org_id = org_default (VITE_SYNC_ORG_ID / fallback)
-  → KEK actual (Vercel) → 2 docs ciphertext
-
-[FASE 2 — PRUEBA BD]
-Console Firestore → docs con ciphertext/iv/wrapped_dek/blind_curp
-  → assert: sin nombre/CURP/email en claro
-
-[FASE 3 — PRUEBA ADMIN APP]
-Login admin@example.com
-  → GET /api/affiliates/secure-list (Bearer)
-  → decrypt server-side
-  → Lista + Detalle: fullName, curp, email, phone, address (+ createdAt)
-  → assert: count=2, todos los campos del envelope visibles
+INECapture / FieldView
+  → INEProcessor (revisión editable)
+  → ocrOrchestrator / groqVisionService
+  → POST /api/groq-ine → groqIneCore (INE_VISION_PROMPT + modelo)
+  → INEStructuredData
+  → SelfRegistrationForm.handleINEDataExtracted  ← MAPEO ROTO
+       city = municipio (código)
+       state = estado (no normalizado)
+       zip  = sin tocar
+  → (opcional) syncAck structuredDataToAffiliatePayload
+       solo address string + curp + name…  ← fuera de scope demo-reset A
 ```
 
-| Capa | Archivos | ¿Cambio en Opción A? |
-|------|----------|----------------------|
-| Store | `encryptedAffiliateFirebaseStore.ts` | Solo si se añade `purgeEncryptedAffiliatesForDemo` (script/API ops) |
-| Write D.2 | `secureCore`, `cloudEncryptionService`, mapper sync | **STOP — no tocar** |
-| Read Admin | `secureListCore`, hook, `AffiliatesView`, `AffiliateDetailView` | Posible **mejora UX** detalle (mostrar los 5 campos de forma explícita/completa) |
-| OCR / Autocaptura / D.1 purge | — | **STOP** |
-| Env | `ADMIN_DEFAULT_ORG_ID`, `CLOUD_KEK_*`, `VITE_SYNC_ORG_ID` | Verificar; allowlist puede reducirse a `org_default` post-limpieza |
+| Capa | Archivos | Riesgo al tocar |
+|------|----------|-----------------|
+| Prompt Vision | `api/groqIneCore.ts`, espejo `services/promptTemplates.ts` | Calidad OCR; tokens |
+| Post-OCR validación | **nuevo** `services/ineFieldNormalization.ts` (propuesto) | Bajo si puro/puro test |
+| Form map | `components/auth/SelfRegistrationForm.tsx` | UX campo |
+| Catálogo | `constants.tsx` + **nuevo** mapa código estado/municipio | Datos estáticos |
+| UI revisión | `components/ine/INEProcessor.tsx` | Warnings de inconsistencia |
+| STOP | Autocaptura umbrales, D.1 purge, D.2 encrypt schema, Admin list | No tocar |
 
 ---
 
-## 2. Fases detalladas
+## 2. Diseño propuesto (capas)
 
-### FASE 0 — Purga controlada de BD (ops)
+### APO-OCR-MAP.1 — Contrato de salida Vision (prompt + schema)
 
-**Objetivo:** colección `encrypted_affiliates` vacía.
+Exigir en JSON (parametrizado en prompt central, **sin hardcode en JSX**):
 
-**Procedimiento propuesto (elegir uno en GO):**
+```text
+estado_codigo: "11"           // 2 dígitos INE
+estado_nombre: "Guanajuato"   // nombre oficial
+municipio_codigo: "020"
+municipio_nombre: "León"      // o el que corresponda al catálogo
+domicilio_lineas: string      // texto completo como en INE
+codigo_postal: "37510"        // 5 dígitos si visible en domicilio
+curp: 18 chars
+clave_elector: 18 chars
+```
 
-| Modo | Cómo | Riesgo |
-|------|------|--------|
-| **0.A Console** | Firebase Console → borrar los 3 docs manualmente | Bajo; auditable visualmente |
-| **0.B Script Admin** | Script one-shot `scripts/purge-encrypted-affiliates-demo.mjs` con Admin SA; requiere flag `I_UNDERSTAND=YES` | Bajo si scoped a una colección |
+Reglas prompt:  
+- Preferir MRZ/reverso para validar fecha nacimiento vs CURP posiciones 5–10.  
+- No inventar; si solo hay código, devolver código y dejar `*_nombre` vacío.  
+- CURP/clave: caracteres exactos; advertir ambigüedad O/0, I/1.
 
-**Reglas:**
-- Scope **solo** `encrypted_affiliates` (no tocar Auth users, ni otras colecciones).
-- Log: cantidad borrada, projectId, timestamp.
-- Evidencia: screenshot Console `No documents` / count 0.
-- **Prohibido** borrar desde el browser del Admin UI en esta fase (evita API de delete pública).
+**Compat:** mantener `estado` / `municipio` / `domicilio` legacy rellenados (= nombre o código) para no romper callers.
 
-**Criterio de salida FASE 0:** Firestore muestra 0 documentos en `encrypted_affiliates`.
+Actualizar `INEStructuredData` en `types.ts` con campos opcionales nuevos.
 
----
+### APO-OCR-MAP.2 — Normalización determinística (servicio)
 
-### FASE 1 — Re-captura cliente (2 registros reales)
+Módulo `services/ineFieldNormalization.ts` (anti-God-component):
 
-**Responsable:** cliente / brigadista en campo.  
-**App:** Production actual (`movimiento.vercel.app`) con sync → `org_default` + KEK vigente.
+| Función | Comportamiento |
+|---------|----------------|
+| `normalizeMexicanState(raw)` | `"11"` / `"GTO"` / `"GUANAJUATO"` → `"Guanajuato"` ∈ `MEXICAN_STATES` |
+| `parsePostalCodeFromDomicilio(domicilio)` | Regex `\b\d{5}\b` (p. ej. 37510) |
+| `resolveCity(municipioNombre\|codigo, domicilio)` | Preferir nombre; si solo código, intentar parsear ciudad tras CP en domicilio (`LEON, GTO`) |
+| `validateCurpChecksum(curp)` | Dígito verificador CURP (algo oficial) → flag `curpValid` |
+| `crossCheckCurpDob(curp, fechaNacimiento)` | Coherencia YYMMDD |
 
-**Checklist pre-captura (ops):**
-- [ ] `FIRESTORE_BACKEND=firestore`
-- [ ] `CLOUD_KEK_SECRET` / `CLOUD_BLIND_SECRET` estables (**no rotar** entre captura y demo)
-- [ ] `VITE_SYNC_ORG_ID=org_default` (o vacío → fallback `org_default`)
-- [ ] `ADMIN_DEFAULT_ORG_ID=org_default` (allowlist simple post-limpieza)
-- [ ] `VITE_USE_ENCRYPTED_AFFILIATES_ADMIN=true` + Bearer configurado
+Catálogo mínimo: mapa **32 estados** código→nombre (INE). Municipios: **fase 1** no requiere catálogo completo 2k+; prioridad parseo de domicilio + estado. Catálogo municipio por estado = **fase 2 opcional**.
 
-**Criterio de salida FASE 1:**
-- 2 ACK exitosos (2xx o 409).
-- Exactamente **2** docs nuevos en Firestore, ambos `org_id == org_default`.
-- Smoke API list (Bearer) → `count: 2` y decrypt OK (sin `decrypt skip`).
+### APO-OCR-MAP.3 — Cableado formulario
 
----
+En `handleINEDataExtracted`:
 
-### FASE 2 — Demostración “BD solo cifrada”
+```text
+address ← domicilio (completo)
+zip     ← codigo_postal || parsePostalCodeFromDomicilio(domicilio)
+state   ← normalizeMexicanState(estado_nombre || estado || estado_codigo)
+city    ← municipio_nombre || cityFromDomicilio || (no usar código crudo como city)
+```
 
-**Guion:**
-1. Abrir Firebase → `encrypted_affiliates` → seleccionar cada doc.
-2. Mostrar campos: `ciphertext`, `iv`, `wrapped_dek`, `blind_curp`, `alg=AES-GCM`, `kek_id`.
-3. Buscar (Ctrl+F) nombre/CURP del afiliado en el panel → **no debe aparecer** en claro.
+Si tras normalizar `state` no está en `MEXICAN_STATES` → dejar vacío / pedir selección (mejor que Aguascalientes falso). **Cambiar default** `state: ''` o placeholder “Seleccione estado” en lugar de `MEXICAN_STATES[0]`.
 
-**Criterio de salida:** evidencia screenshot + checklist firmado (cliente/auditor).
+### APO-OCR-MAP.4 — UX revisión OCR (U-First)
 
-**Nota:** Esto **ya lo garantiza** el pipeline D.2b actual si FASE 1 usa el proxy; **no requiere código nuevo** salvo verificación.
+En `INEProcessor`:  
+- Badge/warning si CURP inválido o incoherente con fecha.  
+- Badge si `municipio` parece solo dígitos (“código INE — verificar ciudad”).  
+- Mantener **edición manual** + Confirmar (nunca bloquear sin salida).
 
----
+### APO-OCR-MAP.5 — (Opcional, GO aparte) Envelope nube
 
-### FASE 3 — Demostración “Admin lee todo lo persistido”
-
-**Guion:**
-1. Login `admin@example.com`.
-2. Banner proxy autorizado + `2 registro(s)`.
-3. Lista: nombre + CURP visibles (no docId monstruo).
-4. Abrir detalle de **cada** afiliado → mostrar **todos** los campos del envelope:
-   - Nombre completo  
-   - CURP  
-   - Email  
-   - Teléfono  
-   - Dirección  
-   - Fecha de registro (`createdAt`)  
-5. (Opcional) DevTools → Network → response JSON **sin** `ciphertext`/`iv`/`wrapped_dek`.
-
-**Gap UX actual (Opción A — posible diff tras GO):**
-- Detalle ya muestra email/teléfono/CURP/dirección; reforzar labels y evitar `—, —` confusos cuando city/state no vienen del envelope (mostrar solo `address` del sobre, no inventar ciudad/CP).
-
-**Criterio de salida:** cliente ve 2/2 afiliados con los 5+1 campos legibles solo en sesión Admin.
+Hoy sync solo manda `address` string. Ampliar `AffiliateData` con `city`/`state`/`zip` = **reabre D.2 write** → **fuera** de este APO salvo `GO APO-OCR-MAP + ENVELOPE`.
 
 ---
 
-## 3. Trabajo de ingeniería (solo tras GO)
+## 3. Fases de entrega
 
-### Si GO = Opción A (recomendado)
+| Fase | Contenido | ETA | Dependencias |
+|------|-----------|-----|--------------|
+| **M.1** | Catálogo estados + `ineFieldNormalization` + tests unitarios | ~2–3 h | — |
+| **M.2** | Prompt/schema Vision + types | ~1–2 h | M.1 opcional |
+| **M.3** | `SelfRegistrationForm` map + default state | ~1 h | M.1 |
+| **M.4** | Warnings INEProcessor | ~1 h | M.1 |
+| **M.5** | Smoke con fixture Héctor (frontal+reverso) + umbral CURP exacto | ~1–2 h | M.2–M.4 |
+| **M.6** | Envelope city/state/zip | Diferido | GO aparte |
 
-1. **Ops FASE 0** (Console o script scoped) — sin tocar write crypto.  
-2. **APO-DEMO-A.1 (UI):** ajustar `AffiliateDetailView` / mapper para presentar **exactamente** los campos del DTO decrypt (sin placeholders engañosos `—, —` que parezcan datos faltantes cifrados).  
-3. **APO-DEMO-A.2 (ops env):** simplificar `ADMIN_DEFAULT_ORG_ID=org_default` post-purga.  
-4. **Verificación smoke** documentada (T1–T6 abajo).  
-5. Commit/push solo tras evidencia + GO de merge.
-
-### Si GO = Opción B (ampliar envelope)
-
-Plan hijo separado: ampliar `AffiliateData`, mapper OCR→payload, `toDto`, detalle UI, migración N/A (BD vacía tras FASE 0). **Reabre D.2 write** → auditoría Qwen específica obligatoria.
-
----
-
-## 4. Seguridad / SSD
-
-| Control | Aplicación |
-|---------|------------|
-| KEK / Blind | Solo `process.env` server; nunca `VITE_CLOUD_*` |
-| Delete | No endpoint público de purge; script/Console con confirmación |
-| List Admin | Bearer + allowlist org env (sin query org del cliente) |
-| Minimización respuesta | DTO sin ciphertext/iv/wrapped_dek/key_id |
-| Rotación KEK | **Prohibida** entre FASE 1 y demo |
+**Recomendación GO inicial:** **M.1 + M.3 + M.4** primero (gana UX inmediata aunque el modelo siga fallando a veces), luego **M.2 + M.5** (mejora extracción).
 
 ---
 
-## 5. STOP (inamovible)
+## 4. Alternativas y trade-offs
 
-- No tocar D.1 purge / Zero-PII device.  
-- No tocar autocaptura INE / Groq OCR (salvo que Opción B lo exija y se apruebe).  
-- No exponer KEK al frontend.  
-- No `listAll` sin filtro `org_id`.  
-- No hotfixes: cualquier hallazgo en FASE 1–3 → **actualizar este plan** y nueva aprobación.
+| Enfoque | Pros | Contras |
+|---------|------|---------|
+| Solo prompt (sin normalizer) | Rápido | Sigue rompiendo si el modelo devuelve `"11"` |
+| Solo normalizer (sin prompt) | Determinístico; arregla 020→parse domicilio | CURP sigue dependiendo del modelo |
+| **Prompt + normalizer (propuesto)** | Defensa en profundidad | Más archivos; hay que versionar prompt en un solo canal |
+| Catálogo municipios completo | Ciudad perfecta desde código | Pesado; mantenimiento INE |
 
 ---
 
-## 6. Test plan (evidencia)
+## 5. Test plan
 
 | ID | Caso | Esperado |
 |----|------|----------|
-| T0 | Post-purga Console | 0 docs |
-| T1 | Tras 2 capturas | 2 docs, `org_id=org_default` |
-| T2 | Doc raw | Solo ciphertext; sin PII clara |
-| T3 | List sin Bearer | 401 |
-| T4 | List Admin | count=2; 5 campos plaintext c/u |
-| T5 | Detalle Admin | mismos campos; sin docId como “dato cifrado” |
-| T6 | Bundle / Network | sin `CLOUD_KEK`; response sin `wrapped_dek` |
+| T1 | `normalizeMexicanState("11")` | Guanajuato |
+| T2 | `normalizeMexicanState("GTO")` | Guanajuato |
+| T3 | Domicilio con `37510` | zip=`37510` |
+| T4 | municipio=`020` + domicilio León | city ≠ `020` (nombre o parseado) |
+| T5 | Fixture Héctor Vision | CURP exacto `AAGH650922HGTLTC04` (meta demo; si falla, warning + editable) |
+| T6 | Clave exacta | `ALGTHC65092211H100` |
+| T7 | Form tras extract | state∈MEXICAN_STATES; zip 5 dígitos; sin default Aguascalientes espurio |
+| T8 | Regresión Autocaptura / D.1 / Admin list | Sin cambios de comportamiento |
+| T9 | Bundle | Sin secretos; prompts solo vía servicio/config |
 
 ---
 
-## 7. Roles y secuencia temporal
+## 6. STOP (inamovible)
 
-| # | Quién | Acción |
-|---|-------|--------|
-| 1 | Auditor/Usuario | Aprueba este plan (Opción A o B) |
-| 2 | Cursor (tras GO) | FASE 0 + UI A.1 si aplica + env |
-| 3 | Cliente | 2 capturas reales |
-| 4 | Cursor + Usuario | T1–T6 + guion demo |
-| 5 | Usuario | Demo al cliente |
+- No tocar umbrales/ventana de **autocaptura**.  
+- No tocar D.1 purge / Zero-PII.  
+- No tocar D.2 encrypt/decrypt ni Admin secure-list (salvo GO envelope M.6).  
+- No hotfixes en `INEProcessor` monstruo sin extraer normalizer a `services/`.  
+- No ampliar Opción B de DEMO-RESET por la puerta de atrás.
 
 ---
 
-## 8. Riesgos
+## 7. Riesgos
 
 | Riesgo | Mitigación |
 |--------|------------|
-| Borrar colección equivocada | Script/Console scoped + confirmación explícita |
-| Rotar KEK otra vez | Freeze de secrets hasta fin de demo |
-| Cliente espera campos INE extra no persistidos | Opción A declarada; o GO Opción B |
-| Allowlist multi-org con basura vieja | Tras purge → solo `org_default` |
+| Prompt nuevo degrada otros campos | Fixture A/B; flag `VITE_INE_PROMPT_V2` o env `INE_VISION_PROMPT_VERSION` server |
+| Municipio código sin catálogo | Parseo domicilio; UI warning |
+| CURP nunca 100% | Validación + edición obligatoria si checksum falla |
+| God-component | Lógica en `services/ineFieldNormalization.ts` |
 
 ---
 
-## 9. Checklist pre-código (Regla 1)
+## 8. Checklist pre-código
 
-- [x] Plan con grafo, contratos, riesgos, STOP  
-- [x] Opción A vs B explícita  
-- [ ] **GO Qwen / usuario:** `GO APO-DEMO-RESET Opción A` \| `GO Opción B` \| `Ajustar: …`  
-- [ ] Sin diffs hasta ese GO  
+- [x] Diagnóstico con evidencia INE real  
+- [x] Grafo UI → form → proxy Vision  
+- [x] Normalización parametrizada (catálogo/constants)  
+- [x] U-First: editar + warnings  
+- [ ] **GO Qwen/usuario**
 
 ---
 
-## 10. Decisión solicitada
+## 9. Decisión solicitada
 
 Responder con una:
 
-1. **`GO APO-DEMO-RESET Opción A`** — purga + re-captura + UI detalle fiel al envelope (recomendado).  
-2. **`GO APO-DEMO-RESET Opción B`** — además ampliar schema cifrado con más campos INE.  
-3. **`Ajustar plan: …`**
+1. **`GO APO-OCR-MAP M.1+M.3+M.4`** — normalizer + form + warnings (recomendado primero).  
+2. **`GO APO-OCR-MAP completo M.1–M.5`** — incluye prompt Vision + smoke Héctor.  
+3. **`GO APO-OCR-MAP + M.6 envelope`** — además city/state/zip en cifrado nube (reabre D.2 write).  
+4. **`Ajustar plan: …`**
 
-**Sin GO → no se borra BD ni se escribe código.**
+**Sin GO → no hay diffs.**
