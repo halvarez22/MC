@@ -6,8 +6,9 @@
 export const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 export const MAX_COMBINED_BASE64_BYTES = 5 * 1024 * 1024;
 export const MAX_CONTENT_LENGTH_BYTES = MAX_COMBINED_BASE64_BYTES + 512 * 1024;
-export const DEFAULT_VISION_MODEL = 'qwen/qwen3.6-27b';
-export const ALLOWED_VISION_MODELS = ['qwen/qwen3.6-27b', 'qwen/qwen3.8-27b'] as const;
+/** Default vivo en Groq (3.6 puede devolver model_not_found según cuenta). */
+export const DEFAULT_VISION_MODEL = 'qwen/qwen3.8-27b';
+export const ALLOWED_VISION_MODELS = ['qwen/qwen3.8-27b', 'qwen/qwen3.6-27b'] as const;
 
 export const INE_VISION_PROMPT = `Eres un extractor de datos de credenciales INE mexicanas.
 Analiza las imágenes (frontal y, si existe, posterior) y devuelve SOLO un objeto JSON válido con este esquema:

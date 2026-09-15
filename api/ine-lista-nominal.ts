@@ -9,8 +9,8 @@ import {
   DEFAULT_TIMEOUT_MS,
   MAX_BODY_BYTES,
   processListaNominalRequest,
-} from './listaNominalCore';
-import type { ListaNominalQuery } from '../types';
+} from './listaNominalCore.js';
+import type { ListaNominalQuery } from '../types.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {

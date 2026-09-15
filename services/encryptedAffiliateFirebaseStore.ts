@@ -8,7 +8,7 @@
 
 import { initializeApp, getApps, cert, applicationDefault, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
-import type { EncryptedAffiliateRecord } from './cloudEncryptionService';
+import type { EncryptedAffiliateRecord } from './cloudEncryptionService.js';
 
 export const ENCRYPTED_AFFILIATES_COLLECTION = 'encrypted_affiliates';
 

@@ -19,7 +19,7 @@ import {
   CLOUD_ENC_VERSION,
   CLOUD_ENC_ALG,
   BLIND_INDEX_NOTE,
-} from './cloudEncryptionSpike';
+} from './cloudEncryptionSpike.js';
 
 export { type KeyManagementService, BLIND_INDEX_NOTE };
 

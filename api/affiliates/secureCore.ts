@@ -6,12 +6,12 @@ import {
   encryptAffiliateRecord,
   type AffiliateData,
   BLIND_INDEX_NOTE,
-} from '../../services/cloudEncryptionService';
+} from '../../services/cloudEncryptionService.js';
 import {
   DuplicateEncryptedAffiliateError,
   saveEncryptedAffiliateUnique,
   ensureAdminWritePossible,
-} from '../../services/encryptedAffiliateFirebaseStore';
+} from '../../services/encryptedAffiliateFirebaseStore.js';
 
 export type SecureAffiliateBody = {
   orgId?: string;

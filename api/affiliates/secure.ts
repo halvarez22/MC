@@ -7,7 +7,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   processSecureAffiliateRequest,
   type SecureAffiliateBody,
-} from './secureCore';
+} from './secureCore.js';
 
 function isProd(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';

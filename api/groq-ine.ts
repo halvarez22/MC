@@ -9,7 +9,7 @@ import {
   MAX_COMBINED_BASE64_BYTES,
   processGroqIneRequest,
   type GroqIneBody,
-} from './groqIneCore';
+} from './groqIneCore.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {

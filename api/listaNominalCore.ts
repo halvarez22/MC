@@ -8,7 +8,7 @@ import type {
   ListaNominalQuery,
   ListaNominalResult,
   ListaNominalStatus,
-} from '../types';
+} from '../types.js';
 
 export const DEFAULT_DATOS_NONSTOP_BASE_URL = 'https://api.datosnonstop.com';
 export const LISTA_NOMINAL_PATH = '/v1/ine/lista-nominal';

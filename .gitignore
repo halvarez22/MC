@@ -37,3 +37,8 @@ usuarios demo*.txt
 *.njsproj
 *.sln
 *.sw?
+.vercel
+
+# Firebase Admin / service account keys (nunca subir)
+*firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
