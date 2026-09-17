@@ -62,7 +62,26 @@ export const useSyncOffline = () => {
 
       if (navigator.onLine) {
         // D.2b: POST /api/affiliates/secure — ACK 2xx|409 → purga; 5xx/red → no purgar
-        const ack = await acknowledgeIneSync(structuredData);
+        let syncPayload: unknown = structuredData;
+        if (frontal) {
+          try {
+            const { buildIneFrontThumbBase64 } = await import(
+              '../services/ineThumbService'
+            );
+            const thumb = await buildIneFrontThumbBase64(frontal);
+            if (thumb) {
+              syncPayload = {
+                ...(structuredData && typeof structuredData === 'object'
+                  ? (structuredData as object)
+                  : {}),
+                thumbFrontJpegBase64: thumb,
+              };
+            }
+          } catch (thumbErr) {
+            console.warn('[sync] thumb build skip', thumbErr);
+          }
+        }
+        const ack = await acknowledgeIneSync(syncPayload);
         if (isValidSyncAck(ack)) {
           console.log(
             `✅ INE ${ine.id} ACK ${ack.status} syncId=${ack.syncId} affiliateId=${ack.affiliateId}`

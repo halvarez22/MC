@@ -19,6 +19,8 @@ export type SecureAffiliateBody = {
   /** APO-AUDIT-FORENSIC */
   actorEmail?: string;
   actorRole?: 'admin' | 'brigadista' | 'unknown';
+  /** APO-ADMIN-INE-THUMB — JPEG miniatura frontal (base64, sin data:); opcional */
+  thumbFrontJpegBase64?: string;
 };
 
 export type SecureAffiliateResult = {
@@ -89,6 +91,7 @@ export async function processSecureAffiliateRequest(
     await saveEncryptedAffiliateUnique(record);
   } catch (err) {
     if (err instanceof DuplicateEncryptedAffiliateError) {
+      const dupId = `${orgId}__${record.blind_curp}`.slice(0, 1500);
       await recordServerAudit(
         {
           action: 'AFFILIATE_DUPLICATE',
@@ -97,12 +100,32 @@ export async function processSecureAffiliateRequest(
           actorRole,
           curpMasked,
           blindCurpPrefix: blindPrefix,
-          affiliateId: `${orgId}__${record.blind_curp}`.slice(0, 1500),
+          affiliateId: dupId,
           orgId,
           sourceSummary: '',
         },
         opts?.auditMeta
       );
+      let thumbSaved = false;
+      const thumbB64 =
+        typeof body.thumbFrontJpegBase64 === 'string'
+          ? body.thumbFrontJpegBase64.trim()
+          : '';
+      if (thumbB64) {
+        try {
+          const { saveAffiliateFrontThumb } = await import(
+            '../../services/affiliateMediaStore.js'
+          );
+          const thumbResult = await saveAffiliateFrontThumb({
+            orgId,
+            affiliateId: record.id || dupId,
+            thumbFrontJpegBase64: thumbB64,
+          });
+          thumbSaved = thumbResult.ok;
+        } catch {
+          /* no bloquear 409 */
+        }
+      }
       return {
         status: 409,
         body: {
@@ -112,8 +135,9 @@ export async function processSecureAffiliateRequest(
           code: err.code,
           note: BLIND_INDEX_NOTE,
           syncId,
-          affiliateId: `${orgId}__${record.blind_curp}`.slice(0, 1500),
+          affiliateId: dupId,
           store: storeReady.mode,
+          thumbSaved,
         },
       };
     }
@@ -137,6 +161,34 @@ export async function processSecureAffiliateRequest(
     opts?.auditMeta
   );
 
+  let thumbSaved = false;
+  let thumbError: string | undefined;
+  const thumbB64 =
+    typeof body.thumbFrontJpegBase64 === 'string'
+      ? body.thumbFrontJpegBase64.trim()
+      : '';
+  if (thumbB64) {
+    try {
+      const { saveAffiliateFrontThumb } = await import(
+        '../../services/affiliateMediaStore.js'
+      );
+      const thumbResult = await saveAffiliateFrontThumb({
+        orgId,
+        affiliateId: record.id,
+        thumbFrontJpegBase64: thumbB64,
+      });
+      if (thumbResult.ok) {
+        thumbSaved = true;
+      } else {
+        thumbError = thumbResult.error;
+        console.warn('[secure] thumb skip:', thumbResult.error);
+      }
+    } catch (err) {
+      thumbError = err instanceof Error ? err.message : 'thumb error';
+      console.warn('[secure] thumb exception:', thumbError);
+    }
+  }
+
   return {
     status: 201,
     body: {
@@ -147,6 +199,8 @@ export async function processSecureAffiliateRequest(
       projectId: process.env.FIREBASE_PROJECT_ID || null,
       syncId,
       affiliateId: record.id,
+      thumbSaved,
+      ...(thumbError ? { thumbError } : {}),
       record: {
         id: record.id,
         org_id: record.org_id,

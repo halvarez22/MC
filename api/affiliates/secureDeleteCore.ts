@@ -71,6 +71,18 @@ export async function processSecureAffiliateDeleteRequest(
   try {
     const result = await deleteEncryptedById(affiliateId, { allowedOrgIds });
 
+    try {
+      const { deleteAffiliateFrontThumb } = await import(
+        '../../services/affiliateMediaStore.js'
+      );
+      await deleteAffiliateFrontThumb(result.affiliateId);
+    } catch (thumbErr) {
+      console.warn(
+        '[secure-delete] thumb cleanup',
+        thumbErr instanceof Error ? thumbErr.message : thumbErr
+      );
+    }
+
     const { maskCurp } = await import('../../services/auditMask.js');
     const { recordServerAudit } = await import('../../services/auditApiCore.js');
     await recordServerAudit(

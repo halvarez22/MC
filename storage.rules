@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// APO-ADMIN-INE-THUMB — cliente sin acceso directo a Storage.
+// Lectura/escritura solo vía Admin SDK (API secure-thumb / secure).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_USE_ENCRYPTED_AFFILIATES_ADMIN?: string;
   /** Demo only — mismo valor que ADMIN_LIST_SECRET. APO.3 → ID token. */
   readonly VITE_ADMIN_LIST_BEARER?: string;
+  /** APO-ADMIN-INE-THUMB — mostrar miniatura en detalle Afiliados (default ON). */
+  readonly VITE_USE_INE_FRONT_THUMB?: string;
 }
 
 interface ImportMeta {

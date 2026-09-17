@@ -278,6 +278,21 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
 
             } else if (isFieldMode) {
                 // --- F.1: Modo Campo ONLINE → POST /api/affiliates/secure ---
+                let thumbFrontJpegBase64: string | undefined;
+                const frontalFile =
+                    ineImages?.frontal || uploadedFiles['INE Frontal'] || null;
+                if (frontalFile) {
+                    try {
+                        const { buildIneFrontThumbBase64 } = await import(
+                            '../../services/ineThumbService'
+                        );
+                        const thumb = await buildIneFrontThumbBase64(frontalFile);
+                        if (thumb) thumbFrontJpegBase64 = thumb;
+                    } catch (thumbErr) {
+                        console.warn('[field] thumb build skip', thumbErr);
+                    }
+                }
+
                 const ack = await syncFieldAffiliate({
                     fullName: formData.fullName,
                     email: formData.email,
@@ -296,6 +311,7 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                     validity: ineData?.fecha_vigencia,
                     actorEmail: fieldUser?.email,
                     actorRole: 'brigadista',
+                    thumbFrontJpegBase64,
                 });
 
                 // 201 y 409 (duplicado) = éxito operativo (dato seguro en bóveda)

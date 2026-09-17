@@ -99,6 +99,8 @@ export function fieldFormToSecureSyncInput(input: {
   ineState?: string;
   actorEmail?: string;
   actorRole?: 'admin' | 'brigadista' | 'unknown';
+  /** APO-ADMIN-INE-THUMB */
+  thumbFrontJpegBase64?: string;
 }): Record<string, unknown> {
   const addressParts = [input.address, input.city, input.state, input.zip]
     .map((p) => String(p || '').trim())
@@ -118,6 +120,9 @@ export function fieldFormToSecureSyncInput(input: {
     ...(input.orgId?.trim() ? { orgId: input.orgId.trim() } : {}),
     ...(opt(input.actorEmail)
       ? { actorEmail: opt(input.actorEmail), actorRole: input.actorRole || 'brigadista' }
+      : {}),
+    ...(opt(input.thumbFrontJpegBase64)
+      ? { thumbFrontJpegBase64: opt(input.thumbFrontJpegBase64) }
       : {}),
     ...(opt(input.voterId) ? { voterId: opt(input.voterId), clave_elector: opt(input.voterId) } : {}),
     ...(opt(input.ineState || input.state)
@@ -192,6 +197,11 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
       ? o.actorRole
       : 'brigadista';
 
+  const thumbFrontJpegBase64 =
+    typeof o.thumbFrontJpegBase64 === 'string' && o.thumbFrontJpegBase64.trim()
+      ? o.thumbFrontJpegBase64.trim()
+      : undefined;
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SECURE_SYNC_TIMEOUT_MS);
 
@@ -203,6 +213,7 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
         orgId,
         payload,
         ...(actorEmail ? { actorEmail, actorRole } : {}),
+        ...(thumbFrontJpegBase64 ? { thumbFrontJpegBase64 } : {}),
       }),
       signal: controller.signal,
     });

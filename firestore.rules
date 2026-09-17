@@ -48,5 +48,10 @@ service cloud.firestore {
     match /audit_events/{eventId} {
       allow read, write: if false;
     }
+
+    // APO-ADMIN-INE-THUMB — metadata de miniatura; solo Admin SDK.
+    match /affiliate_media/{docId} {
+      allow read, write: if false;
+    }
   }
 }

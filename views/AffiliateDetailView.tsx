@@ -2,13 +2,17 @@
  * APO-DEMO-RESET A.1 — Detalle Admin: envelope desencriptado.
  * APO-ADMIN-BAJA — Dar de baja (hard delete; CURP reafiliable).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Affiliate } from '../types';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import { getStoredAuthUser } from '../services/authSessionStore';
 import { appendForensicEvent } from '../services/forensicAuditClient';
+import {
+  fetchAffiliateFrontThumb,
+  isIneFrontThumbUiEnabled,
+} from '../services/affiliateFrontThumbClient';
 
 interface AffiliateDetailViewProps {
   affiliate: Affiliate;
@@ -59,6 +63,28 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({
   const curp = affiliate.ineData?.curp?.trim() || '';
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const showThumb = isIneFrontThumbUiEnabled();
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [thumbLoading, setThumbLoading] = useState(false);
+  const [thumbError, setThumbError] = useState<string | null>(null);
+
+  const loadThumb = useCallback(async () => {
+    if (!showThumb) return;
+    setThumbLoading(true);
+    setThumbError(null);
+    const result = await fetchAffiliateFrontThumb(affiliate.id);
+    if (result.ok) {
+      setThumbUrl(result.dataUrl);
+    } else {
+      setThumbUrl(null);
+      setThumbError(
+        result.status === 404
+          ? 'Sin miniatura INE para este afiliado.'
+          : result.error
+      );
+    }
+    setThumbLoading(false);
+  }, [affiliate.id, showThumb]);
 
   useEffect(() => {
     const u = getStoredAuthUser();
@@ -74,6 +100,10 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({
     }, 400);
     return () => window.clearTimeout(t);
   }, [affiliate.id]);
+
+  useEffect(() => {
+    void loadThumb();
+  }, [loadThumb]);
 
   const handleConfirmDelete = async () => {
     if (!onDeleteEncrypted) return;
@@ -132,6 +162,32 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({
           <DetailItem label="Fecha de registro" value={formatCreatedAt(createdAt)} />
         </dl>
       </Card>
+
+      {showThumb ? (
+        <Card>
+          <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
+            Credencial INE (anverso)
+          </h2>
+          {thumbLoading ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Cargando miniatura…</p>
+          ) : thumbUrl ? (
+            <img
+              src={thumbUrl}
+              alt="Miniatura INE frontal"
+              className="max-w-full max-h-72 rounded-md border border-gray-200 dark:border-gray-700 object-contain bg-gray-50 dark:bg-gray-950"
+            />
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {thumbError || 'Sin miniatura INE.'}
+              </p>
+              <Button type="button" variant="secondary" onClick={() => void loadThumb()}>
+                Reintentar
+              </Button>
+            </div>
+          )}
+        </Card>
+      ) : null}
 
       <Modal
         isOpen={confirmOpen}

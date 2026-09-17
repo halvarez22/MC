@@ -38,7 +38,7 @@ export type PrivacySection = {
 
 /** Texto corto de referencia para consentimiento in-app (el modal usa copy con enlace JSX). */
 export const PRIVACY_CONSENT_SUMMARY =
-  'Para proteger tu información, tus datos se cifran en este dispositivo (cuando la función de cifrado en reposo esté activa) y las fotos de tu INE se eliminan automáticamente tras la validación exitosa. Al continuar, aceptas nuestro Aviso de Privacidad.';
+  'Para proteger tu información, tus datos se cifran en este dispositivo (cuando la función de cifrado en reposo esté activa). Las fotos completas del INE se eliminan del dispositivo tras la validación exitosa; el administrador puede conservar únicamente una miniatura del anverso para verificación en el padrón. Al continuar, aceptas nuestro Aviso de Privacidad.';
 
 export function buildPrivacyNoticeSections(org: PrivacyOrgConfig = getPrivacyOrgConfig()): {
   title: string;
@@ -83,7 +83,7 @@ export function buildPrivacyNoticeSections(org: PrivacyOrgConfig = getPrivacyOrg
         id: 'finalidades',
         title: '2. Finalidades del tratamiento',
         paragraphs: [
-          'Finalidades primarias (necesarias para la prestación del servicio): verificar la autenticidad y vigencia de la Credencial para Votar (INE) mediante extracción de datos (OCR/Visión) y, cuando la función esté habilitada, consulta a fuentes autorizadas (Lista Nominal del INE a través de proveedores de verificación de identidad autorizados); generar constancias o reportes de verificación de identidad; prevenir fraudes, suplantación de identidad y uso de documentos alterados o falsificados; cumplir con obligaciones legales y regulatorias aplicables.',
+          'Finalidades primarias (necesarias para la prestación del servicio): verificar la autenticidad y vigencia de la Credencial para Votar (INE) mediante extracción de datos (OCR/Visión) y, cuando la función esté habilitada, consulta a fuentes autorizadas (Lista Nominal del INE a través de proveedores de verificación de identidad autorizados); generar constancias o reportes de verificación de identidad; permitir que el administrador visualice una miniatura del anverso de la credencial con fines de verificación del padrón; prevenir fraudes, suplantación de identidad y uso de documentos alterados o falsificados; cumplir con obligaciones legales y regulatorias aplicables.',
           `Finalidades secundarias (no necesarias para el servicio principal): envío de comunicaciones comerciales, promociones o información sobre nuevos servicios (solo con su consentimiento); análisis estadísticos y mejora de la App (de forma anonimizada o agregada siempre que sea posible). Usted puede oponerse al tratamiento para finalidades secundarias en cualquier momento enviando un correo a ${org.email}.`,
         ],
       },
@@ -105,7 +105,7 @@ export function buildPrivacyNoticeSections(org: PrivacyOrgConfig = getPrivacyOrg
         title: '4. Medidas de seguridad',
         paragraphs: [
           'Implementamos medidas administrativas, técnicas y físicas de seguridad para proteger sus datos personales contra daño, pérdida, alteración, destrucción o uso, acceso o tratamiento no autorizados.',
-          'En el dispositivo, cuando la función de cifrado en reposo esté activa, los datos sensibles almacenados localmente (por ejemplo texto extraído e imágenes de la INE en cola offline) se cifran mediante la Web Crypto API del navegador con AES-GCM; las claves criptográficas se generan como no exportables (extractable: false) y no se exponen en texto claro en el código de la aplicación. Tras la validación exitosa en nuestros servidores, las imágenes de documentos y el texto crudo asociados se eliminan automáticamente del almacenamiento local del dispositivo.',
+          'En el dispositivo, cuando la función de cifrado en reposo esté activa, los datos sensibles almacenados localmente (por ejemplo texto extraído e imágenes de la INE en cola offline) se cifran mediante la Web Crypto API del navegador con AES-GCM; las claves criptográficas se generan como no exportables (extractable: false) y no se exponen en texto claro en el código de la aplicación. Tras la validación exitosa en nuestros servidores, las imágenes completas de documentos y el texto crudo asociados se eliminan automáticamente del almacenamiento local del dispositivo. En el servidor, cuando la función esté habilitada, puede conservarse una miniatura reducida del anverso de la INE, accesible únicamente a administradores autorizados para verificación del padrón; dicha miniatura se elimina al dar de baja el registro.',
           'Las claves de API de proveedores de verificación se almacenan únicamente en el servidor (nunca en el navegador).',
         ],
       },

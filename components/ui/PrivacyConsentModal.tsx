@@ -29,8 +29,10 @@ const PrivacyConsentModal: React.FC<PrivacyConsentModalProps> = ({
         <div className="space-y-5">
           <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 leading-relaxed">
             Para proteger tu información, tus datos se cifran en este dispositivo (cuando la
-            función de cifrado en reposo esté activa) y las fotos de tu INE se eliminan
-            automáticamente tras la validación exitosa. Al continuar, aceptas nuestro{' '}
+            función de cifrado en reposo esté activa). Las fotos completas del INE se eliminan
+            del dispositivo tras la validación exitosa; el administrador puede conservar
+            únicamente una miniatura del anverso para verificación en el padrón. Al continuar,
+            aceptas nuestro{' '}
             <button
               type="button"
               onClick={() => setShowFullNotice(true)}

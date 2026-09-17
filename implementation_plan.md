@@ -1,68 +1,36 @@
-# APO-AUDIT-FORENSIC — Bitácora forense (accesos + gestiones)
+# APO-ADMIN-INE-THUMB — Miniatura frontal INE (solo Admin · menú Afiliados)
 
-**Estado:** ✅ **IMPLEMENTADO** (A.1–A.6)  
-**Alcance:** Solo visible para **Admin**. Afiliados en bóveda siguen cifrados; la bitácora es rastro de movimientos, no padrón.
-
----
-
-## 0. Intención del cliente (cerrada)
-
-| Requisito | Acuerdo |
-|-----------|---------|
-| Quién / desde dónde / hora | **Sí** |
-| Login fallido | **Sí** + origen del intento |
-| Afilió / baja | Detalle con **CURP enmascarado** (no nombre/domicilio) |
-| Menús de la app | Registrar entrada a pantallas relevantes |
-| Quién ve la bitácora | **Solo Admin** |
-| CURP en BD afiliados | Sigue **cifrado** en `encrypted_affiliates` |
+**Estado:** ✅ **IMPLEMENTADO** (T.0–T.5)  
+**Alcance:** Solo frontal · Solo Admin · Solo detalle en **Afiliados** · Sin foto en envelope.
 
 ---
 
-## 1. Entrega
+## Entrega
 
 | Capa | Archivos |
 |------|----------|
-| Mask | `services/auditMask.ts` |
-| Store | `services/auditEventStore.ts` (`audit_events`, mock\|Firestore) |
-| API | `api/audit/append.ts`, `api/audit/list.ts`, `api/audit/auditCore.ts` |
-| Server hooks | `secureCore.ts`, `secureDeleteCore.ts` → `recordServerAudit` |
-| Cliente | `services/forensicAuditClient.ts` — Login / logout / SCREEN_VIEW |
-| UI | `AuditLogView` + `AuditLogTable` (Usuario / Desde dónde / Hora / Acción) |
-| Proxy Vite | `/api/audit/append`, `/api/audit/list` |
-| Rules | `firestore.rules` — `audit_events` deny all client |
-| Flag | `VITE_USE_FORENSIC_AUDIT` (default ON; `false` → mock legacy) |
-| Smoke | `npm run smoke:audit-forensic:local` |
+| Config | `services/ineThumbConfig.ts` |
+| Thumb | `services/ineThumbService.ts` |
+| Store | `services/affiliateMediaStore.ts` (mock \| Storage + `affiliate_media`) |
+| Sync | `secureCore` acepta `thumbFrontJpegBase64`; campo + `useSyncOffline` generan thumb pre-ACK |
+| Read | `GET /api/affiliates/secure-thumb` + proxy Vite |
+| Delete | `secureDeleteCore` limpia Storage/meta |
+| UI | `AffiliateDetailView` — bloque “Credencial INE (anverso)” |
+| Rules | `firestore.rules` + `storage.rules` deny client |
+| Privacy | consentimiento + aviso actualizados |
+| Flag | `VITE_USE_INE_FRONT_THUMB` (default ON; `false` oculta UI) |
+| Smoke | `npm run smoke:ine-front-thumb:local` |
 
-**Auth append:** LOGIN_* / LOGOUT anónimos acotados; SCREEN_VIEW y list con Bearer `ADMIN_LIST_SECRET`.
-
----
-
-## 2. CURP enmascarado
-
-`maskCurp('AAGH650922HGTLTC04')` → `AAGH********TC04` — solo `curpMasked` en eventos.
+**STOP respetado:** no posterior; no thumb en Datos INE/lista; no bytes en ciphertext; D.1 purge intacta (upload antes).
 
 ---
 
-## 3. Verificación
+## Verificación
 
 ```bash
-npm run smoke:audit-forensic:local
+npm run smoke:ine-front-thumb:local
 ```
 
-Esperado: LOGIN_FAILURE con IP en `sourceSummary`, AFFILIATE_CREATE con CURP enmascarado, SCREEN_VIEW, list 200 / 401 sin Bearer.
+Prod: configurar `FIREBASE_STORAGE_BUCKET` (y SA) en Vercel; desplegar `storage.rules`.
 
-**Hotfix prod (2026-09-17):** `POST /api/audit/append` → `FUNCTION_INVOCATION_FAILED` porque Firestore Admin rechaza campos `undefined` en el documento. Fix: `omitUndefined` antes de `set` + try/catch en append.
-
-**STOP:** D.1 IndexedDB, foto INE, no ampliar envelope afiliado para audit.
-
----
-
-## 4. Checklist carta industrial
-
-- [x] Intención + CURP enmascarado acordados  
-- [x] Grafo API → store → UI  
-- [x] Mínimo PII (sin nombre/domicilio)  
-- [x] GO implementación A.1–A.6  
-- [x] UI Admin-only + Reintentar en error de carga  
-- [x] Debounce pantallas (400 ms)  
-- [x] Validación en capa servicio  
+¿Commit/push? (pedir explícito)
