@@ -104,6 +104,14 @@ function newId(): string {
   return `aud_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out as Partial<T>;
+}
+
 export async function appendAuditEvent(input: AuditEventInput): Promise<AuditEvent> {
   const event: AuditEvent = {
     id: input.id || newId(),
@@ -128,8 +136,12 @@ export async function appendAuditEvent(input: AuditEventInput): Promise<AuditEve
     return event;
   }
 
+  // Firestore Admin rechaza campos `undefined` → FUNCTION_INVOCATION_FAILED en Vercel.
   const db = getDb();
-  await db.collection(AUDIT_EVENTS_COLLECTION).doc(event.id).set(event);
+  await db
+    .collection(AUDIT_EVENTS_COLLECTION)
+    .doc(event.id)
+    .set(omitUndefined(event as unknown as Record<string, unknown>));
   return event;
 }
 

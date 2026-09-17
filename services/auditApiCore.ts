@@ -135,26 +135,39 @@ export async function processAuditAppendRequest(
     body.curpMasked ||
     (body.curp ? maskCurp(body.curp) : undefined);
 
-  const event = await appendAuditEvent(
-    buildAuditFromRequest(
-      {
-        action: actionRaw,
-        outcome,
-        actorEmail: String(body.actorEmail || 'desconocido').trim(),
-        actorRole: body.actorRole || 'unknown',
-        curpMasked,
-        blindCurpPrefix: body.blindCurpPrefix,
-        affiliateId: body.affiliateId,
-        orgId: body.orgId,
-        screen: body.screen,
-        userAgentBrief: briefUserAgent(body.userAgent),
-        sourceSummary: '', // filled by buildAuditFromRequest
-      },
-      opts.meta
-    )
-  );
+  try {
+    const event = await appendAuditEvent(
+      buildAuditFromRequest(
+        {
+          action: actionRaw,
+          outcome,
+          actorEmail: String(body.actorEmail || 'desconocido').trim(),
+          actorRole: body.actorRole || 'unknown',
+          curpMasked,
+          blindCurpPrefix: body.blindCurpPrefix,
+          affiliateId: body.affiliateId,
+          orgId: body.orgId,
+          screen: body.screen,
+          userAgentBrief: briefUserAgent(body.userAgent),
+          sourceSummary: '', // filled by buildAuditFromRequest
+        },
+        opts.meta
+      )
+    );
 
-  return { status: 201, body: { ok: true, id: event.id, ts: event.ts } };
+    return { status: 201, body: { ok: true, id: event.id, ts: event.ts } };
+  } catch (err) {
+    console.error(
+      '[audit] append error',
+      err instanceof Error ? err.message : err
+    );
+    return {
+      status: 500,
+      body: {
+        error: err instanceof Error ? err.message : 'audit append failed',
+      },
+    };
+  }
 }
 
 export async function processAuditListRequest(opts: {

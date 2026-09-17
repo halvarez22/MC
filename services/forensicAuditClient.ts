@@ -36,7 +36,7 @@ export async function appendForensicEvent(input: {
       headers.Authorization = `Bearer ${bearer}`;
     }
 
-    await fetch(APPEND_PATH, {
+    const res = await fetch(APPEND_PATH, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -51,6 +51,9 @@ export async function appendForensicEvent(input: {
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
       }),
     });
+    if (!res.ok) {
+      console.warn('[audit] append HTTP', res.status);
+    }
   } catch {
     /* no bloquear UX */
   }
