@@ -1,4 +1,4 @@
-const CACHE_NAME = 'afiliados-cache-v3';
+const CACHE_NAME = 'afiliados-cache-v4';
 // Mirror de public/service-worker.js (Vite sirve public/ → dist).
 const URLS_TO_CACHE = [
   '/manifest.json',

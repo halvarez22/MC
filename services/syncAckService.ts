@@ -9,6 +9,8 @@ export type SyncAckSuccess = {
   status: number;
   syncId: string;
   affiliateId: string;
+  /** APO-ADMIN-INE-THUMB — si el server persistió miniatura */
+  thumbSaved?: boolean;
 };
 
 export type SyncAckFailure = {
@@ -222,6 +224,7 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
       syncId?: string;
       affiliateId?: string;
       error?: string;
+      thumbSaved?: boolean;
       record?: { id?: string };
     } = {};
     try {
@@ -237,6 +240,7 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
         status: 409,
         syncId: body.syncId || newId('sync'),
         affiliateId: body.affiliateId || body.record?.id || newId('aff'),
+        thumbSaved: body.thumbSaved === true,
       };
     }
 
@@ -246,6 +250,7 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
         status: res.status,
         syncId: body.syncId || newId('sync'),
         affiliateId: body.affiliateId || body.record?.id || newId('aff'),
+        thumbSaved: body.thumbSaved === true,
       };
     }
 

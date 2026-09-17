@@ -19,6 +19,7 @@ import {
   acknowledgeIneSync,
   isValidSyncAck,
 } from '../services/syncAckService';
+import { buildIneFrontThumbBase64 } from '../services/ineThumbService';
 
 /** Evento para forzar sync desde UI desacoplada (p. ej. botón en INEProcessor). */
 export const FORCE_INE_SYNC_EVENT = 'forceINESync';
@@ -65,9 +66,6 @@ export const useSyncOffline = () => {
         let syncPayload: unknown = structuredData;
         if (frontal) {
           try {
-            const { buildIneFrontThumbBase64 } = await import(
-              '../services/ineThumbService'
-            );
             const thumb = await buildIneFrontThumbBase64(frontal);
             if (thumb) {
               syncPayload = {
@@ -76,6 +74,8 @@ export const useSyncOffline = () => {
                   : {}),
                 thumbFrontJpegBase64: thumb,
               };
+            } else {
+              console.warn('[sync] miniatura INE: resize null');
             }
           } catch (thumbErr) {
             console.warn('[sync] thumb build skip', thumbErr);

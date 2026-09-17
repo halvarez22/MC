@@ -1,4 +1,4 @@
-const CACHE_NAME = 'afiliados-cache-v3';
+const CACHE_NAME = 'afiliados-cache-v4';
 // No precachear index.html ni `/`: tras un redeploy Vite cambia los hashes
 // de /assets/* y un HTML viejo en caché provoca 404 en JS/CSS.
 const URLS_TO_CACHE = [

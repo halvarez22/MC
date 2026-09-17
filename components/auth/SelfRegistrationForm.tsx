@@ -7,6 +7,7 @@ import {
   isValidSyncAck,
   syncFieldAffiliate,
 } from '../../services/syncAckService';
+import { buildIneFrontThumbBase64 } from '../../services/ineThumbService';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
@@ -283,14 +284,21 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                     ineImages?.frontal || uploadedFiles['INE Frontal'] || null;
                 if (frontalFile) {
                     try {
-                        const { buildIneFrontThumbBase64 } = await import(
-                            '../../services/ineThumbService'
-                        );
                         const thumb = await buildIneFrontThumbBase64(frontalFile);
-                        if (thumb) thumbFrontJpegBase64 = thumb;
+                        if (thumb) {
+                            thumbFrontJpegBase64 = thumb;
+                        } else {
+                            console.warn(
+                              '[field] miniatura INE: resize devolvió null (revisar File/canvas)'
+                            );
+                        }
                     } catch (thumbErr) {
                         console.warn('[field] thumb build skip', thumbErr);
                     }
+                } else {
+                    console.warn(
+                      '[field] miniatura INE: no hay File frontal en memoria al guardar'
+                    );
                 }
 
                 const ack = await syncFieldAffiliate({
@@ -322,6 +330,16 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                             : 'No se pudo confirmar el guardado cifrado. Reintenta.'
                     );
                     return;
+                }
+                if (ack.thumbSaved === false && thumbFrontJpegBase64) {
+                    console.warn(
+                      '[field] texto OK pero miniatura no persistió (thumbSaved=false)'
+                    );
+                }
+                if (!thumbFrontJpegBase64) {
+                    console.warn(
+                      '[field] guardado sin miniatura — Admin no verá anverso INE'
+                    );
                 }
 
                 affiliateData = {
