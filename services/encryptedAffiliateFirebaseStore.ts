@@ -163,8 +163,10 @@ export async function saveEncryptedAffiliateUnique(
     return runMockTransaction(async (tx) => {
       const existing = await tx.findByOrgAndBlindCurp(record.org_id, record.blind_curp);
       if (existing) throw new DuplicateEncryptedAffiliateError();
-      tx.set(record);
-      return record;
+      const id = stableDocId(record.org_id, record.blind_curp);
+      const toWrite = { ...record, id };
+      tx.set(toWrite);
+      return toWrite;
     });
   }
 

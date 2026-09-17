@@ -88,7 +88,7 @@ export async function processSecureAffiliateRequest(
   const blindPrefix = String(record.blind_curp || '').slice(0, 8);
 
   try {
-    await saveEncryptedAffiliateUnique(record);
+    record = await saveEncryptedAffiliateUnique(record);
   } catch (err) {
     if (err instanceof DuplicateEncryptedAffiliateError) {
       const dupId = `${orgId}__${record.blind_curp}`.slice(0, 1500);
@@ -118,10 +118,10 @@ export async function processSecureAffiliateRequest(
           );
           const thumbResult = await saveAffiliateFrontThumb({
             orgId,
-            affiliateId: record.id || dupId,
+            affiliateId: dupId,
             thumbFrontJpegBase64: thumbB64,
           });
-          thumbSaved = thumbResult.ok;
+          thumbSaved = thumbResult.ok === true;
         } catch {
           /* no bloquear 409 */
         }
@@ -145,7 +145,7 @@ export async function processSecureAffiliateRequest(
     return { status: 500, body: { error: message } };
   }
 
-  const savedId = `${orgId}__${record.blind_curp}`.slice(0, 1500);
+  const savedId = record.id || `${orgId}__${record.blind_curp}`.slice(0, 1500);
   await recordServerAudit(
     {
       action: 'AFFILIATE_CREATE',
@@ -174,7 +174,7 @@ export async function processSecureAffiliateRequest(
       );
       const thumbResult = await saveAffiliateFrontThumb({
         orgId,
-        affiliateId: record.id,
+        affiliateId: savedId,
         thumbFrontJpegBase64: thumbB64,
       });
       if (thumbResult.ok === true) {
@@ -198,11 +198,11 @@ export async function processSecureAffiliateRequest(
       store: storeReady.mode,
       projectId: process.env.FIREBASE_PROJECT_ID || null,
       syncId,
-      affiliateId: record.id,
+      affiliateId: savedId,
       thumbSaved,
       ...(thumbError ? { thumbError } : {}),
       record: {
-        id: record.id,
+        id: savedId,
         org_id: record.org_id,
         blind_curp: record.blind_curp,
         enc_v: record.enc_v,

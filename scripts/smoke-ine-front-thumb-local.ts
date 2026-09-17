@@ -57,6 +57,10 @@ async function main() {
   assert(create.body.thumbSaved === true, 'thumbSaved');
   const affiliateId = String(create.body.affiliateId || '');
   assert(affiliateId, 'affiliateId');
+  assert(
+    String(affiliateId).includes('org_default__') || String(affiliateId).includes('__'),
+    `affiliateId should be stable doc id, got ${affiliateId}`
+  );
 
   const denied = await processSecureThumbRequest({
     authorizationHeader: 'Bearer wrong',
