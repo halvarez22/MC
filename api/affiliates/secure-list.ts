@@ -2,11 +2,11 @@
  * APO Admin list — GET /api/affiliates/secure-list
  * Decrypt server-side only. Auth: ADMIN_LIST_SECRET (demo).
  * APO-ADMIN-INE-THUMB: ?affiliateId=&thumb=1 → miniatura (misma función; evita +1 serverless Hobby).
+ * Import dinámico del thumb para no tumbar el cold start del listado.
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { processSecureAffiliateListRequest } from './secureListCore.js';
-import { processSecureThumbRequest } from '../../services/secureThumbCore.js';
 
 function isProd(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
@@ -34,11 +34,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     typeof req.query.affiliateId === 'string' ? req.query.affiliateId : undefined;
 
   if (wantThumb) {
-    const result = await processSecureThumbRequest({
-      authorizationHeader,
-      affiliateId,
-    });
-    return res.status(result.status).json(result.body);
+    try {
+      const { processSecureThumbRequest } = await import(
+        '../../services/secureThumbCore.js'
+      );
+      const result = await processSecureThumbRequest({
+        authorizationHeader,
+        affiliateId,
+      });
+      return res.status(result.status).json(result.body);
+    } catch (err) {
+      return res.status(500).json({
+        error: err instanceof Error ? err.message : 'Error al leer miniatura',
+      });
+    }
   }
 
   // TODO(APO.3): Reemplazar ADMIN_LIST_SECRET por validación de Firebase ID Token + Custom Claims

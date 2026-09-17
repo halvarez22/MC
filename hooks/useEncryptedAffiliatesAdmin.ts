@@ -30,6 +30,21 @@ export type DecryptedAffiliateApiRow = {
 const LIST_PATH = '/api/affiliates/secure-list';
 const DELETE_PATH = '/api/affiliates/secure-delete';
 
+function formatApiError(err: unknown, fallback: string): string {
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (err && typeof err === 'object') {
+    const o = err as { message?: unknown; error?: unknown };
+    if (typeof o.message === 'string' && o.message.trim()) return o.message.trim();
+    if (typeof o.error === 'string' && o.error.trim()) return o.error.trim();
+    try {
+      return JSON.stringify(err);
+    } catch {
+      /* ignore */
+    }
+  }
+  return fallback;
+}
+
 function dash(v?: string): string {
   const s = String(v ?? '').trim();
   return s || '—';
@@ -136,13 +151,16 @@ export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult
           }),
         });
         const body = (await res.json().catch(() => ({}))) as {
-          error?: string;
+          error?: unknown;
           ok?: boolean;
           deleted?: boolean;
           affiliateId?: string;
         };
         if (!res.ok) {
-          return { ok: false, error: body.error || `Error HTTP ${res.status}` };
+          return {
+            ok: false,
+            error: formatApiError(body.error, `Error HTTP ${res.status}`),
+          };
         }
         setTick((t) => t + 1);
         return {
@@ -195,14 +213,16 @@ export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult
           },
         });
         const body = (await res.json().catch(() => ({}))) as {
-          error?: string;
+          error?: unknown;
           orgId?: string;
           count?: number;
           affiliates?: DecryptedAffiliateApiRow[];
         };
 
         if (!res.ok) {
-          throw new Error(body.error || `Error HTTP ${res.status}`);
+          throw new Error(
+            formatApiError(body.error, `Error HTTP ${res.status}`)
+          );
         }
 
         const rows = Array.isArray(body.affiliates) ? body.affiliates : [];
