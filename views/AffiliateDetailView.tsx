@@ -1,15 +1,20 @@
 /**
- * APO-DEMO-RESET A.1 — Detalle Admin: solo campos del envelope desencriptado.
- * fullName, curp, email, phone, address, createdAt — sin placeholders city/CP.
+ * APO-DEMO-RESET A.1 — Detalle Admin: envelope desencriptado.
+ * APO-ADMIN-BAJA — Dar de baja (hard delete; CURP reafiliable).
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Affiliate } from '../types';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 
 interface AffiliateDetailViewProps {
   affiliate: Affiliate;
   onBack: () => void;
+  /** Path cifrado: permite hard delete vía API Admin */
+  canDeleteEncrypted?: boolean;
+  deleting?: boolean;
+  onDeleteEncrypted?: (affiliateId: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const DetailItem: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => {
@@ -38,9 +43,29 @@ function formatCreatedAt(iso: string): string {
   }
 }
 
-const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({ affiliate, onBack }) => {
+const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({
+  affiliate,
+  onBack,
+  canDeleteEncrypted = false,
+  deleting = false,
+  onDeleteEncrypted,
+}) => {
   const { fullName, email, phone, address, createdAt } = affiliate;
   const curp = affiliate.ineData?.curp?.trim() || '';
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!onDeleteEncrypted) return;
+    setDeleteError(null);
+    const result = await onDeleteEncrypted(affiliate.id);
+    if (!result.ok) {
+      setDeleteError(result.error || 'No se pudo dar de baja. Reintenta.');
+      return;
+    }
+    setConfirmOpen(false);
+    onBack();
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -51,9 +76,25 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({ affiliate, on
             <p className="text-gray-500 dark:text-gray-300 mt-1">CURP: {curp}</p>
           ) : null}
         </div>
-        <Button onClick={onBack} variant="secondary" className="w-full sm:w-auto">
-          &larr; Volver a la lista
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button onClick={onBack} variant="secondary" className="w-full sm:w-auto" disabled={deleting}>
+            &larr; Volver a la lista
+          </Button>
+          {canDeleteEncrypted && onDeleteEncrypted ? (
+            <Button
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmOpen(true);
+              }}
+              variant="danger"
+              className="w-full sm:w-auto"
+              disabled={deleting}
+              isLoading={deleting}
+            >
+              Dar de baja
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Card>
@@ -69,6 +110,55 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({ affiliate, on
           <DetailItem label="Fecha de registro" value={formatCreatedAt(createdAt)} />
         </dl>
       </Card>
+
+      <Modal
+        isOpen={confirmOpen}
+        onClose={() => {
+          if (!deleting) setConfirmOpen(false);
+        }}
+        title="Confirmar baja"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-200">
+            ¿Dar de baja a <strong>{fullName}</strong>
+            {curp ? (
+              <>
+                {' '}
+                (CURP <strong>{curp}</strong>)
+              </>
+            ) : null}
+            ?
+          </p>
+          <p className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-md p-3">
+            Se eliminará el registro cifrado de forma permanente. El CURP quedará libre y podrá
+            afiliarse de nuevo en el futuro.
+          </p>
+          {deleteError ? (
+            <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+              {deleteError}
+            </p>
+          ) : null}
+          <div className="flex flex-col sm:flex-row gap-3 justify-end pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setConfirmOpen(false)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => void handleConfirmDelete()}
+              isLoading={deleting}
+              disabled={deleting}
+            >
+              Confirmar baja
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

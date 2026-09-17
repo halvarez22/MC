@@ -1,5 +1,6 @@
 /**
  * APO.2 — Lista afiliados desencriptados vía proxy autorizado.
+ * APO-ADMIN-BAJA — removeAffiliate → POST /api/affiliates/secure-delete
  * Nunca importa cloudEncryptionService (SSD).
  */
 
@@ -19,6 +20,7 @@ export type DecryptedAffiliateApiRow = {
 };
 
 const LIST_PATH = '/api/affiliates/secure-list';
+const DELETE_PATH = '/api/affiliates/secure-delete';
 
 function mapToAffiliate(row: DecryptedAffiliateApiRow): Affiliate {
   const ineData: INEData = {
@@ -54,6 +56,10 @@ function mapToAffiliate(row: DecryptedAffiliateApiRow): Affiliate {
   };
 }
 
+export type RemoveAffiliateResult =
+  | { ok: true; deleted: boolean; affiliateId: string }
+  | { ok: false; error: string };
+
 export type UseEncryptedAffiliatesAdminResult = {
   enabled: boolean;
   loading: boolean;
@@ -62,6 +68,8 @@ export type UseEncryptedAffiliatesAdminResult = {
   orgId: string | null;
   count: number;
   refetch: () => void;
+  removing: boolean;
+  removeAffiliate: (affiliateId: string) => Promise<RemoveAffiliateResult>;
 };
 
 export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult {
@@ -72,10 +80,64 @@ export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult
   const [orgId, setOrgId] = useState<string | null>(null);
   const [count, setCount] = useState(0);
   const [tick, setTick] = useState(0);
+  const [removing, setRemoving] = useState(false);
 
   const refetch = useCallback(() => {
     setTick((t) => t + 1);
   }, []);
+
+  const removeAffiliate = useCallback(
+    async (affiliateId: string): Promise<RemoveAffiliateResult> => {
+      if (!enabled) {
+        return { ok: false, error: 'Modo cifrado Admin no activo' };
+      }
+      const id = affiliateId?.trim();
+      if (!id) {
+        return { ok: false, error: 'affiliateId requerido' };
+      }
+      // TODO(APO.3): Reemplazar VITE_ADMIN_LIST_BEARER por Firebase ID Token
+      const bearer = (import.meta.env.VITE_ADMIN_LIST_BEARER as string | undefined)?.trim();
+      if (!bearer) {
+        return { ok: false, error: 'Falta VITE_ADMIN_LIST_BEARER' };
+      }
+
+      setRemoving(true);
+      try {
+        const res = await fetch(DELETE_PATH, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${bearer}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ affiliateId: id }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          ok?: boolean;
+          deleted?: boolean;
+          affiliateId?: string;
+        };
+        if (!res.ok) {
+          return { ok: false, error: body.error || `Error HTTP ${res.status}` };
+        }
+        setTick((t) => t + 1);
+        return {
+          ok: true,
+          deleted: Boolean(body.deleted),
+          affiliateId: body.affiliateId || id,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : 'Error de red al eliminar',
+        };
+      } finally {
+        setRemoving(false);
+      }
+    },
+    [enabled]
+  );
 
   useEffect(() => {
     if (!enabled) {
@@ -143,5 +205,15 @@ export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult
     };
   }, [enabled, tick]);
 
-  return { enabled, loading, data, error, orgId, count, refetch };
+  return {
+    enabled,
+    loading,
+    data,
+    error,
+    orgId,
+    count,
+    refetch,
+    removing,
+    removeAffiliate,
+  };
 }

@@ -144,7 +144,25 @@ const AffiliatesView: React.FC<AffiliatesViewProps> = ({ user }) => {
   }
 
   if (viewMode === 'detail' && affiliateForDetail) {
-    return <AffiliateDetailView affiliate={affiliateForDetail} onBack={handleBackToList} />;
+    return (
+      <AffiliateDetailView
+        affiliate={affiliateForDetail}
+        onBack={handleBackToList}
+        canDeleteEncrypted={encryptedAdmin.enabled && user.role === 'admin'}
+        deleting={encryptedAdmin.removing}
+        onDeleteEncrypted={
+          encryptedAdmin.enabled
+            ? async (id) => {
+                const result = await encryptedAdmin.removeAffiliate(id);
+                if (!result.ok) {
+                  return { ok: false, error: result.error };
+                }
+                return { ok: true };
+              }
+            : undefined
+        }
+      />
+    );
   }
 
   return (
@@ -225,6 +243,7 @@ const AffiliatesView: React.FC<AffiliatesViewProps> = ({ user }) => {
         onEdit={handleOpenModalForEdit}
         onViewDetails={handleViewDetails}
         user={user}
+        hideEdit={encryptedAdmin.enabled}
       />
 
       {filteredAffiliates.length > ITEMS_PER_PAGE && (

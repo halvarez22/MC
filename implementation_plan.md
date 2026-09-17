@@ -1,15 +1,23 @@
-# APO-FIELD-HANG — Registro se queda “pasmado”
+# APO-ADMIN-BAJA — Baja / eliminación de afiliados (Admin)
 
-**Estado:** 🟢 **FIX LISTO — pendiente commit/push**  
-**Evidencia:** API prod `POST /api/affiliates/secure` → **201 en ~1s**. Hang = cliente (SW + sin timeout + `confirm` geo).
+**Estado:** 🟢 **IMPLEMENTADO B.1–B.3 (+ B.4 rules)** — pendiente commit/push/deploy  
+**Decisión:** Hard delete → CURP **reafiliable** (no 409 tras baja).  
+**Smoke local:** `npm run smoke:admin-baja:local` → **MOCK_SMOKE PASS**  
+**Smoke prod (tras deploy):** `npm run smoke:admin-baja`
 
-## Fix aplicado
+## Entregado
 
-| H | Cambio |
-|---|--------|
-| H.1 | SW `v3`: no intercepta `/api/` |
-| H.2 | `acknowledgeIneSync`: AbortController 25s |
-| H.3 | Geo: “Continuar sin ubicación” (sin `confirm` nativo) |
-| H.4 | Campo: no espera `createUser`/email post-ACK |
+| Fase | Qué |
+|------|-----|
+| B.1 | `deleteEncryptedById` + `POST /api/affiliates/secure-delete` + proxy Vite |
+| B.2 | `removeAffiliate` en hook + **Dar de baja** en detalle + modal U-First |
+| B.3 | Smoke local create→delete→create=201; script prod listo |
+| B.4 | `firestore.rules`: `allow delete: if false` (solo Admin SDK) |
 
-**Tras deploy:** en el iPhone, cierra pestaña o “Actualizar sin contenido” una vez para tomar SW v3.
+## UX
+- Detalle Admin → **Dar de baja** → confirma (CURP quedará libre) → lista
+- Sin “Editar” legacy en modo cifrado
+- Cancelar / Reintentar / Volver
+
+## STOP respetados
+D.1 IndexedDB, Autocaptura, foto INE — no tocados.

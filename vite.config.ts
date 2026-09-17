@@ -14,6 +14,10 @@ import {
   type SecureAffiliateBody,
 } from './api/affiliates/secureCore';
 import { processSecureAffiliateListRequest } from './api/affiliates/secureListCore';
+import {
+  processSecureAffiliateDeleteRequest,
+  type SecureDeleteBody,
+} from './api/affiliates/secureDeleteCore';
 import type { ListaNominalQuery } from './types';
 
 /** Proxy local /api/groq-ine (misma lógica que Vercel) para demos con Vite. */
@@ -256,6 +260,66 @@ function localSecureAffiliateListProxy(env: Record<string, string>): Plugin {
   };
 }
 
+/** Proxy local POST /api/affiliates/secure-delete (APO-ADMIN-BAJA). */
+function localSecureAffiliateDeleteProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'local-secure-affiliate-delete-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url?.split('?')[0];
+        if (url !== '/api/affiliates/secure-delete') {
+          next();
+          return;
+        }
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          res.end();
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          for (const [k, v] of Object.entries(env)) {
+            if (v && !process.env[k]) process.env[k] = v;
+          }
+
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const body = (raw ? JSON.parse(raw) : {}) as SecureDeleteBody;
+          const authorizationHeader =
+            typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+
+          const result = await processSecureAffiliateDeleteRequest(body, {
+            authorizationHeader,
+            requireCloudSecrets: false,
+          });
+
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result.body));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Proxy local delete error';
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: message }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
 
@@ -266,6 +330,7 @@ export default defineConfig(({ mode }) => {
       localListaNominalProxy(env),
       localSecureAffiliateProxy(env),
       localSecureAffiliateListProxy(env),
+      localSecureAffiliateDeleteProxy(env),
     ],
     server: {
       port: 3000,

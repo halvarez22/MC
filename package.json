@@ -12,6 +12,8 @@
     "spike:cloud-enc": "npx --yes tsx services/cloudEncryptionSpike.ts",
     "smoke:ine-autocapture": "npx --yes tsx services/ineAutoCaptureSmoke.ts",
     "smoke:ine-ocr-map": "npx --yes tsx services/ineOcrMapSmoke.ts",
+    "smoke:admin-baja": "node scripts/smoke-admin-baja.mjs",
+    "smoke:admin-baja:local": "npx --yes tsx scripts/smoke-admin-baja-local.ts",
     "purge:encrypted-demo": "node scripts/purge-encrypted-affiliates-demo.mjs"
   },
   "dependencies": {

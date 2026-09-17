@@ -238,6 +238,91 @@ export async function listEncryptedByOrg(
   return snap.docs.map((d) => d.data() as EncryptedAffiliateRecord);
 }
 
+export type DeleteEncryptedResult = {
+  deleted: boolean;
+  affiliateId: string;
+  orgId?: string;
+  blindCurpPrefix?: string;
+};
+
+/**
+ * APO-ADMIN-BAJA — Hard delete por id de documento (libera CURP / 409).
+ * Solo Admin SDK / mock. Idempotente si no existe.
+ */
+export async function deleteEncryptedById(
+  affiliateId: string,
+  opts?: { allowedOrgIds?: string[] }
+): Promise<DeleteEncryptedResult> {
+  const id = affiliateId?.trim();
+  if (!id) throw new Error('affiliateId requerido');
+
+  const allow = (opts?.allowedOrgIds || [])
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const allowSet = allow.length > 0 ? new Set(allow) : null;
+
+  const assertOrg = (orgId: string) => {
+    if (allowSet && !allowSet.has(orgId)) {
+      throw new Error('org_id fuera de allowlist Admin');
+    }
+  };
+
+  if (!useRealFirestore()) {
+    let foundKey: string | null = null;
+    let found: EncryptedAffiliateRecord | null = null;
+    for (const [k, row] of memoryStore.entries()) {
+      if (k === id || row.id === id) {
+        foundKey = k;
+        found = row;
+        break;
+      }
+    }
+    if (!found || !foundKey) {
+      return { deleted: false, affiliateId: id };
+    }
+    assertOrg(found.org_id);
+    memoryStore.delete(foundKey);
+    return {
+      deleted: true,
+      affiliateId: id,
+      orgId: found.org_id,
+      blindCurpPrefix: String(found.blind_curp || '').slice(0, 8),
+    };
+  }
+
+  const db = getAdminDb();
+  const col = db.collection(ENCRYPTED_AFFILIATES_COLLECTION);
+  const direct = await col.doc(id).get();
+
+  if (direct.exists) {
+    const data = direct.data() as EncryptedAffiliateRecord;
+    assertOrg(data.org_id);
+    await direct.ref.delete();
+    return {
+      deleted: true,
+      affiliateId: id,
+      orgId: data.org_id,
+      blindCurpPrefix: String(data.blind_curp || '').slice(0, 8),
+    };
+  }
+
+  // Fallback: campo id != docId (legado uuid en body vs doc estable)
+  const q = await col.where('id', '==', id).limit(1).get();
+  if (q.empty) {
+    return { deleted: false, affiliateId: id };
+  }
+  const doc = q.docs[0]!;
+  const data = doc.data() as EncryptedAffiliateRecord;
+  assertOrg(data.org_id);
+  await doc.ref.delete();
+  return {
+    deleted: true,
+    affiliateId: id,
+    orgId: data.org_id,
+    blindCurpPrefix: String(data.blind_curp || '').slice(0, 8),
+  };
+}
+
 export function dumpEncryptedCollection(): EncryptedAffiliateRecord[] {
   return [...memoryStore.values()];
 }

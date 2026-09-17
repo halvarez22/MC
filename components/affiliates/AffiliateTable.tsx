@@ -6,6 +6,8 @@ interface AffiliateTableProps {
   onEdit: (affiliate: Affiliate) => void;
   onViewDetails: (affiliate: Affiliate) => void;
   user: User;
+  /** Path cifrado: Editar legacy no escribe en bóveda */
+  hideEdit?: boolean;
 }
 
 const getValidationStatus = (docs: Document[]): { text: string; color: string } => {
@@ -38,6 +40,7 @@ const AffiliateTable: React.FC<AffiliateTableProps> = ({
   onEdit,
   onViewDetails,
   user,
+  hideEdit = false,
 }) => {
   if (affiliates.length === 0) {
     return (
@@ -117,7 +120,7 @@ const AffiliateTable: React.FC<AffiliateTableProps> = ({
                   </span>
                 </td>
                 <td data-label="Acciones:" className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  {user.role === 'admin' && (
+                  {user.role === 'admin' && !hideEdit && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
