@@ -6,7 +6,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   processAuditAppendRequest,
   type AuditAppendBody,
-} from './auditCore.js';
+} from '../../services/auditApiCore.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {

@@ -2,7 +2,7 @@
  * Smoke local APO-AUDIT-FORENSIC — sin red.
  * FIRESTORE_BACKEND=mock npx tsx scripts/smoke-audit-forensic-local.ts
  */
-import { processAuditAppendRequest, processAuditListRequest } from '../api/audit/auditCore.ts';
+import { processAuditAppendRequest, processAuditListRequest } from '../services/auditApiCore.ts';
 import { processSecureAffiliateRequest } from '../api/affiliates/secureCore.ts';
 import { __resetAuditStoreForTests, type AuditEvent } from '../services/auditEventStore.ts';
 import { formatAuditActionLabel, maskCurp } from '../services/auditMask.ts';

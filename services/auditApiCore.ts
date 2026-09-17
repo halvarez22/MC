@@ -8,16 +8,16 @@ import {
   type AuditAction,
   type AuditEvent,
   type AuditEventInput,
-} from '../../services/auditEventStore.js';
+} from './auditEventStore.js';
 import {
   authorizeAdminListBearer,
-} from '../affiliates/secureListCore.js';
+} from '../api/affiliates/secureListCore.js';
 import {
   buildSourceSummary,
   briefUserAgent,
   extractClientIp,
   maskCurp,
-} from '../../services/auditMask.js';
+} from './auditMask.js';
 
 const ALLOWED_ACTIONS: AuditAction[] = [
   'LOGIN_SUCCESS',

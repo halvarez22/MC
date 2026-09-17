@@ -72,7 +72,7 @@ export async function processSecureAffiliateDeleteRequest(
     const result = await deleteEncryptedById(affiliateId, { allowedOrgIds });
 
     const { maskCurp } = await import('../../services/auditMask.js');
-    const { recordServerAudit } = await import('../audit/auditCore.js');
+    const { recordServerAudit } = await import('../../services/auditApiCore.js');
     await recordServerAudit(
       {
         action: 'ADMIN_AFFILIATE_DELETE',

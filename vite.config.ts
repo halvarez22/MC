@@ -22,7 +22,7 @@ import {
   processAuditAppendRequest,
   processAuditListRequest,
   type AuditAppendBody,
-} from './api/audit/auditCore';
+} from './services/auditApiCore';
 import type { ListaNominalQuery } from './types';
 
 /** Proxy local /api/groq-ine (misma lógica que Vercel) para demos con Vite. */

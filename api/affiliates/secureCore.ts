@@ -81,7 +81,7 @@ export async function processSecureAffiliateRequest(
 
   const syncId = newSyncId();
   const { maskCurp } = await import('../../services/auditMask.js');
-  const { recordServerAudit } = await import('../audit/auditCore.js');
+    const { recordServerAudit } = await import('../../services/auditApiCore.js');
   const curpMasked = maskCurp(payload.curp);
   const blindPrefix = String(record.blind_curp || '').slice(0, 8);
 
