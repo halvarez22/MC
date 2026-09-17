@@ -18,7 +18,6 @@ import {
   processSecureAffiliateDeleteRequest,
   type SecureDeleteBody,
 } from './api/affiliates/secureDeleteCore';
-import { processSecureThumbRequest } from './services/secureThumbCore';
 import {
   processAuditAppendRequest,
   processAuditListRequest,
@@ -212,13 +211,14 @@ function localSecureAffiliateProxy(env: Record<string, string>): Plugin {
   };
 }
 
-/** Proxy local GET /api/affiliates/secure-list (APO Admin decrypt). */
+/** Proxy local GET /api/affiliates/secure-list (APO Admin decrypt + thumb). */
 function localSecureAffiliateListProxy(env: Record<string, string>): Plugin {
   return {
     name: 'local-secure-affiliate-list-proxy',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const url = req.url?.split('?')[0];
+        const rawUrl = req.url || '';
+        const url = rawUrl.split('?')[0];
         if (url !== '/api/affiliates/secure-list') {
           next();
           return;
@@ -246,6 +246,25 @@ function localSecureAffiliateListProxy(env: Record<string, string>): Plugin {
 
           const authorizationHeader =
             typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const q = new URL(rawUrl, 'http://localhost').searchParams;
+          const wantThumb =
+            q.get('thumb') === '1' ||
+            q.get('thumb') === 'true' ||
+            q.get('media') === 'thumb';
+
+          if (wantThumb) {
+            const { processSecureThumbRequest } = await import(
+              './services/secureThumbCore'
+            );
+            const result = await processSecureThumbRequest({
+              authorizationHeader,
+              affiliateId: q.get('affiliateId') || undefined,
+            });
+            res.statusCode = result.status;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result.body));
+            return;
+          }
 
           const result = await processSecureAffiliateListRequest({
             authorizationHeader,
@@ -453,63 +472,6 @@ function localAuditListProxy(env: Record<string, string>): Plugin {
   };
 }
 
-/** Proxy local GET /api/affiliates/secure-thumb (APO-ADMIN-INE-THUMB). */
-function localSecureThumbProxy(env: Record<string, string>): Plugin {
-  return {
-    name: 'local-secure-thumb-proxy',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const rawUrl = req.url || '';
-        const url = rawUrl.split('?')[0];
-        if (url !== '/api/affiliates/secure-thumb') {
-          next();
-          return;
-        }
-
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204;
-          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-          res.end();
-          return;
-        }
-
-        if (req.method !== 'GET') {
-          res.statusCode = 405;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'Method not allowed' }));
-          return;
-        }
-
-        try {
-          for (const [k, v] of Object.entries(env)) {
-            if (v && !process.env[k]) process.env[k] = v;
-          }
-
-          const authorizationHeader =
-            typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
-          const q = new URL(rawUrl, 'http://localhost').searchParams;
-          const affiliateId = q.get('affiliateId') || undefined;
-
-          const result = await processSecureThumbRequest({
-            authorizationHeader,
-            affiliateId,
-          });
-
-          res.statusCode = result.status;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(result.body));
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Proxy local thumb error';
-          res.statusCode = 500;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: message }));
-        }
-      });
-    },
-  };
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
 
@@ -521,7 +483,6 @@ export default defineConfig(({ mode }) => {
       localSecureAffiliateProxy(env),
       localSecureAffiliateListProxy(env),
       localSecureAffiliateDeleteProxy(env),
-      localSecureThumbProxy(env),
       localAuditAppendProxy(env),
       localAuditListProxy(env),
     ],

@@ -2,7 +2,7 @@
  * APO-ADMIN-INE-THUMB — leer miniatura frontal (solo Admin Bearer).
  */
 
-const THUMB_PATH = '/api/affiliates/secure-thumb';
+const THUMB_PATH = '/api/affiliates/secure-list';
 
 export function isIneFrontThumbUiEnabled(): boolean {
   return (
@@ -27,7 +27,7 @@ export async function fetchAffiliateFrontThumb(
 
   try {
     const res = await fetch(
-      `${THUMB_PATH}?affiliateId=${encodeURIComponent(id)}`,
+      `${THUMB_PATH}?thumb=1&affiliateId=${encodeURIComponent(id)}`,
       {
         method: 'GET',
         headers: {
