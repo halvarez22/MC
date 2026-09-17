@@ -97,6 +97,8 @@ export function fieldFormToSecureSyncInput(input: {
   validity?: string;
   /** Estado INE (nombre); si falta, usa state del form */
   ineState?: string;
+  actorEmail?: string;
+  actorRole?: 'admin' | 'brigadista' | 'unknown';
 }): Record<string, unknown> {
   const addressParts = [input.address, input.city, input.state, input.zip]
     .map((p) => String(p || '').trim())
@@ -114,6 +116,9 @@ export function fieldFormToSecureSyncInput(input: {
     address: addressParts.join(', ') || 'SIN_DOMICILIO',
     domicilio: addressParts.join(', ') || 'SIN_DOMICILIO',
     ...(input.orgId?.trim() ? { orgId: input.orgId.trim() } : {}),
+    ...(opt(input.actorEmail)
+      ? { actorEmail: opt(input.actorEmail), actorRole: input.actorRole || 'brigadista' }
+      : {}),
     ...(opt(input.voterId) ? { voterId: opt(input.voterId), clave_elector: opt(input.voterId) } : {}),
     ...(opt(input.ineState || input.state)
       ? { state: opt(input.ineState || input.state), estado_nombre: opt(input.ineState || input.state) }
@@ -177,6 +182,16 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
 
   const orgId = resolveOrgId(structuredData);
 
+  const o = asRecord(structuredData);
+  const actorEmail =
+    typeof o.actorEmail === 'string' && o.actorEmail.trim()
+      ? o.actorEmail.trim()
+      : undefined;
+  const actorRole =
+    o.actorRole === 'admin' || o.actorRole === 'brigadista' || o.actorRole === 'unknown'
+      ? o.actorRole
+      : 'brigadista';
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SECURE_SYNC_TIMEOUT_MS);
 
@@ -184,7 +199,11 @@ export async function acknowledgeIneSync(structuredData: unknown): Promise<SyncA
     const res = await fetch(SECURE_SYNC_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orgId, payload }),
+      body: JSON.stringify({
+        orgId,
+        payload,
+        ...(actorEmail ? { actorEmail, actorRole } : {}),
+      }),
       signal: controller.signal,
     });
 

@@ -82,7 +82,10 @@ export type UseEncryptedAffiliatesAdminResult = {
   count: number;
   refetch: () => void;
   removing: boolean;
-  removeAffiliate: (affiliateId: string) => Promise<RemoveAffiliateResult>;
+  removeAffiliate: (
+    affiliateId: string,
+    opts?: { curp?: string; actorEmail?: string }
+  ) => Promise<RemoveAffiliateResult>;
 };
 
 export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult {
@@ -100,7 +103,10 @@ export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult
   }, []);
 
   const removeAffiliate = useCallback(
-    async (affiliateId: string): Promise<RemoveAffiliateResult> => {
+    async (
+      affiliateId: string,
+      opts?: { curp?: string; actorEmail?: string }
+    ): Promise<RemoveAffiliateResult> => {
       if (!enabled) {
         return { ok: false, error: 'Modo cifrado Admin no activo' };
       }
@@ -123,7 +129,11 @@ export function useEncryptedAffiliatesAdmin(): UseEncryptedAffiliatesAdminResult
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
-          body: JSON.stringify({ affiliateId: id }),
+          body: JSON.stringify({
+            affiliateId: id,
+            curp: opts?.curp,
+            actorEmail: opts?.actorEmail,
+          }),
         });
         const body = (await res.json().catch(() => ({}))) as {
           error?: string;

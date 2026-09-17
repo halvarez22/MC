@@ -43,5 +43,10 @@ service cloud.firestore {
         && request.resource.data.blind_curp == resource.data.blind_curp;
       allow delete: if false;
     }
+
+    // APO-AUDIT-FORENSIC — solo Admin SDK (append/list vía API). Cliente: deny all.
+    match /audit_events/{eventId} {
+      allow read, write: if false;
+    }
   }
 }

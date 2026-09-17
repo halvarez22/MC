@@ -135,6 +135,12 @@ export interface AuditLog {
   userEmail: string;
   action: string;
   details: string;
+  /** APO-AUDIT-FORENSIC — columna «Desde dónde» */
+  sourceSummary?: string;
+  curpMasked?: string;
+  screen?: string;
+  outcome?: 'success' | 'failure' | 'denied';
+  actionCode?: string;
 }
 
 export interface Notification {

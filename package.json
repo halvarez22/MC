@@ -14,6 +14,7 @@
     "smoke:ine-ocr-map": "npx --yes tsx services/ineOcrMapSmoke.ts",
     "smoke:admin-baja": "node scripts/smoke-admin-baja.mjs",
     "smoke:admin-baja:local": "npx --yes tsx scripts/smoke-admin-baja-local.ts",
+    "smoke:audit-forensic:local": "npx --yes tsx scripts/smoke-audit-forensic-local.ts",
     "purge:encrypted-demo": "node scripts/purge-encrypted-affiliates-demo.mjs"
   },
   "dependencies": {

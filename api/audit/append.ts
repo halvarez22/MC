@@ -1,17 +1,12 @@
 /**
- * APO-ADMIN-BAJA — POST /api/affiliates/secure-delete
- * Hard delete cifrado. Auth: ADMIN_LIST_SECRET (demo).
+ * APO-AUDIT-FORENSIC — POST /api/audit/append
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
-  processSecureAffiliateDeleteRequest,
-  type SecureDeleteBody,
-} from './secureDeleteCore.js';
-
-function isProd(): boolean {
-  return process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-}
+  processAuditAppendRequest,
+  type AuditAppendBody,
+} from './auditCore.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
@@ -27,16 +22,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authorizationHeader =
     typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
 
-  const result = await processSecureAffiliateDeleteRequest(
-    (req.body || {}) as SecureDeleteBody,
-    {
-      authorizationHeader,
-      requireCloudSecrets: isProd(),
-      auditMeta: {
-        headers: req.headers as { [k: string]: string | string[] | undefined },
-      },
-    }
-  );
+  const body = (req.body || {}) as AuditAppendBody;
+  const allowAnonymousFailure =
+    body.action === 'LOGIN_FAILURE' ||
+    body.action === 'LOGIN_SUCCESS' ||
+    body.action === 'LOGOUT';
+
+  const result = await processAuditAppendRequest(body, {
+    authorizationHeader,
+    allowAnonymousFailure,
+    meta: { headers: req.headers as { [k: string]: string | string[] | undefined } },
+  });
 
   return res.status(result.status).json(result.body);
 }

@@ -16,6 +16,9 @@ import {
 export type SecureAffiliateBody = {
   orgId?: string;
   payload?: AffiliateData;
+  /** APO-AUDIT-FORENSIC */
+  actorEmail?: string;
+  actorRole?: 'admin' | 'brigadista' | 'unknown';
 };
 
 export type SecureAffiliateResult = {
@@ -32,7 +35,10 @@ function newSyncId(): string {
 
 export async function processSecureAffiliateRequest(
   body: SecureAffiliateBody,
-  opts?: { requireCloudSecrets?: boolean }
+  opts?: {
+    requireCloudSecrets?: boolean;
+    auditMeta?: { headers?: { [k: string]: string | string[] | undefined } };
+  }
 ): Promise<SecureAffiliateResult> {
   if (opts?.requireCloudSecrets) {
     if (!process.env.CLOUD_KEK_SECRET?.trim()) {
@@ -45,6 +51,11 @@ export async function processSecureAffiliateRequest(
 
   const orgId = typeof body.orgId === 'string' ? body.orgId.trim() : '';
   const payload = body.payload;
+  const actorEmail =
+    typeof body.actorEmail === 'string' && body.actorEmail.trim()
+      ? body.actorEmail.trim()
+      : 'campo@desconocido';
+  const actorRole = body.actorRole || 'brigadista';
 
   if (!orgId) {
     return { status: 400, body: { error: 'orgId requerido' } };
@@ -69,11 +80,29 @@ export async function processSecureAffiliateRequest(
   }
 
   const syncId = newSyncId();
+  const { maskCurp } = await import('../../services/auditMask.js');
+  const { recordServerAudit } = await import('../audit/auditCore.js');
+  const curpMasked = maskCurp(payload.curp);
+  const blindPrefix = String(record.blind_curp || '').slice(0, 8);
 
   try {
     await saveEncryptedAffiliateUnique(record);
   } catch (err) {
     if (err instanceof DuplicateEncryptedAffiliateError) {
+      await recordServerAudit(
+        {
+          action: 'AFFILIATE_DUPLICATE',
+          outcome: 'success',
+          actorEmail,
+          actorRole,
+          curpMasked,
+          blindCurpPrefix: blindPrefix,
+          affiliateId: `${orgId}__${record.blind_curp}`.slice(0, 1500),
+          orgId,
+          sourceSummary: '',
+        },
+        opts?.auditMeta
+      );
       return {
         status: 409,
         body: {
@@ -91,6 +120,22 @@ export async function processSecureAffiliateRequest(
     const message = err instanceof Error ? err.message : 'error de persistencia';
     return { status: 500, body: { error: message } };
   }
+
+  const savedId = `${orgId}__${record.blind_curp}`.slice(0, 1500);
+  await recordServerAudit(
+    {
+      action: 'AFFILIATE_CREATE',
+      outcome: 'success',
+      actorEmail,
+      actorRole,
+      curpMasked,
+      blindCurpPrefix: blindPrefix,
+      affiliateId: savedId,
+      orgId,
+      sourceSummary: '',
+    },
+    opts?.auditMeta
+  );
 
   return {
     status: 201,

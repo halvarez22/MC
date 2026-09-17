@@ -13,6 +13,9 @@ import {
 
 export type SecureDeleteBody = {
   affiliateId?: string;
+  /** Para bitácora enmascarada (Admin ya lo ve en claro) */
+  curp?: string;
+  actorEmail?: string;
 };
 
 export type SecureDeleteResult = {
@@ -25,6 +28,7 @@ export async function processSecureAffiliateDeleteRequest(
   opts: {
     authorizationHeader?: string;
     requireCloudSecrets?: boolean;
+    auditMeta?: { headers?: { [k: string]: string | string[] | undefined } };
   }
 ): Promise<SecureDeleteResult> {
   if (!process.env.ADMIN_LIST_SECRET?.trim()) {
@@ -59,9 +63,30 @@ export async function processSecureAffiliateDeleteRequest(
   }
 
   const allowedOrgIds = resolveAdminListOrgIds();
+  const actorEmail =
+    typeof body.actorEmail === 'string' && body.actorEmail.trim()
+      ? body.actorEmail.trim()
+      : 'admin@desconocido';
 
   try {
     const result = await deleteEncryptedById(affiliateId, { allowedOrgIds });
+
+    const { maskCurp } = await import('../../services/auditMask.js');
+    const { recordServerAudit } = await import('../audit/auditCore.js');
+    await recordServerAudit(
+      {
+        action: 'ADMIN_AFFILIATE_DELETE',
+        outcome: 'success',
+        actorEmail,
+        actorRole: 'admin',
+        curpMasked: body.curp ? maskCurp(body.curp) : undefined,
+        blindCurpPrefix: result.blindCurpPrefix,
+        affiliateId: result.affiliateId,
+        orgId: result.orgId,
+        sourceSummary: '',
+      },
+      opts.auditMeta
+    );
 
     console.info('[secure-delete]', {
       affiliateId: result.affiliateId,

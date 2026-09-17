@@ -24,6 +24,10 @@ import ForcePasswordChangeView from './views/ForcePasswordChangeView';
 import INEDataView from './views/INEDataView';
 import PinUnlockModal from './components/ui/PinUnlockModal';
 import PinSetupModal from './components/ui/PinSetupModal';
+import {
+  appendForensicEvent,
+  viewToAuditScreen,
+} from './services/forensicAuditClient';
 
 export type View = 'dashboard' | 'affiliates' | 'audit' | 'users' | 'ine-data';
 
@@ -39,6 +43,30 @@ function App() {
   useEffect(() => {
     installD1E2eHooks();
   }, []);
+
+  /** A.4 — SCREEN_VIEW (debounce 400ms; un evento por entrada de vista) */
+  useEffect(() => {
+    if (!user?.email) return;
+    const screen =
+      user.role === 'brigadista'
+        ? 'field.home'
+        : viewToAuditScreen(currentView, user.role);
+    if (!screen) return;
+    const t = window.setTimeout(() => {
+      void appendForensicEvent({
+        action: 'SCREEN_VIEW',
+        actorEmail: user.email,
+        actorRole:
+          user.role === 'admin'
+            ? 'admin'
+            : user.role === 'brigadista'
+              ? 'brigadista'
+              : 'unknown',
+        screen,
+      });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [user?.email, user?.role, currentView]);
 
   const {
     ready: pinReady,
@@ -85,6 +113,18 @@ function App() {
 
   const handleLogout = useCallback(async () => {
     console.log('🚪 Cerrando sesión...');
+    const email = user?.email || 'desconocido';
+    const role =
+      user?.role === 'admin'
+        ? 'admin'
+        : user?.role === 'brigadista'
+          ? 'brigadista'
+          : 'unknown';
+    void appendForensicEvent({
+      action: 'LOGOUT',
+      actorEmail: email,
+      actorRole: role,
+    });
     try {
       clearStoredAuthUser();
       clearSessionKeyFromMemory();
@@ -102,7 +142,7 @@ function App() {
       clearSessionKeyFromMemory();
       setUser(null);
     }
-  }, [refreshPinLock]);
+  }, [refreshPinLock, user?.email, user?.role]);
 
   const handlePasswordChanged = () => {
     if (user) {

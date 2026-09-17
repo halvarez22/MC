@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { firebaseService } from '../services/firebaseService';
+import { appendForensicEvent } from '../services/forensicAuditClient';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -23,10 +24,26 @@ const LoginView: React.FC<LoginViewProps> = ({ onNavigateToRegister }) => {
     setError('');
     setIsLoading(true);
 
-    const { error } = await firebaseService.auth.signInWithEmailAndPassword(email, password);
+    const { error: authError } = await firebaseService.auth.signInWithEmailAndPassword(
+      email,
+      password
+    );
 
-    if (error) {
-      setError(error.message);
+    if (authError) {
+      setError(authError.message);
+      void appendForensicEvent({
+        action: 'LOGIN_FAILURE',
+        outcome: 'failure',
+        actorEmail: email.trim() || 'desconocido',
+        actorRole: 'unknown',
+      });
+    } else {
+      void appendForensicEvent({
+        action: 'LOGIN_SUCCESS',
+        outcome: 'success',
+        actorEmail: email.trim(),
+        actorRole: 'unknown',
+      });
     }
     setIsLoading(false);
   };

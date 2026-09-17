@@ -294,6 +294,8 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                     locality: ineData?.localidad,
                     emission: ineData?.fecha_emision,
                     validity: ineData?.fecha_vigencia,
+                    actorEmail: fieldUser?.email,
+                    actorRole: 'brigadista',
                 });
 
                 // 201 y 409 (duplicado) = éxito operativo (dato seguro en bóveda)

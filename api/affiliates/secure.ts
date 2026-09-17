@@ -26,7 +26,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const result = await processSecureAffiliateRequest(
     (req.body || {}) as SecureAffiliateBody,
-    { requireCloudSecrets: isProd() }
+    {
+      requireCloudSecrets: isProd(),
+      auditMeta: {
+        headers: req.headers as { [k: string]: string | string[] | undefined },
+      },
+    }
   );
 
   return res.status(result.status).json(result.body);

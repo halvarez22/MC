@@ -152,8 +152,11 @@ const AffiliatesView: React.FC<AffiliatesViewProps> = ({ user }) => {
         deleting={encryptedAdmin.removing}
         onDeleteEncrypted={
           encryptedAdmin.enabled
-            ? async (id) => {
-                const result = await encryptedAdmin.removeAffiliate(id);
+            ? async (id, opts) => {
+                const result = await encryptedAdmin.removeAffiliate(id, {
+                  curp: opts?.curp,
+                  actorEmail: user.email,
+                });
                 if (!result.ok) {
                   return { ok: false, error: result.error };
                 }

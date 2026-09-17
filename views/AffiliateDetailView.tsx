@@ -2,11 +2,13 @@
  * APO-DEMO-RESET A.1 — Detalle Admin: envelope desencriptado.
  * APO-ADMIN-BAJA — Dar de baja (hard delete; CURP reafiliable).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Affiliate } from '../types';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import { getStoredAuthUser } from '../services/authSessionStore';
+import { appendForensicEvent } from '../services/forensicAuditClient';
 
 interface AffiliateDetailViewProps {
   affiliate: Affiliate;
@@ -14,7 +16,10 @@ interface AffiliateDetailViewProps {
   /** Path cifrado: permite hard delete vía API Admin */
   canDeleteEncrypted?: boolean;
   deleting?: boolean;
-  onDeleteEncrypted?: (affiliateId: string) => Promise<{ ok: boolean; error?: string }>;
+  onDeleteEncrypted?: (
+    affiliateId: string,
+    opts?: { curp?: string }
+  ) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const DetailItem: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => {
@@ -55,10 +60,27 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const u = getStoredAuthUser();
+    if (!u?.email) return;
+    const t = window.setTimeout(() => {
+      void appendForensicEvent({
+        action: 'SCREEN_VIEW',
+        actorEmail: u.email,
+        actorRole: u.role === 'admin' ? 'admin' : 'unknown',
+        screen: 'admin.affiliate_detail',
+        affiliateId: affiliate.id,
+      });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [affiliate.id]);
+
   const handleConfirmDelete = async () => {
     if (!onDeleteEncrypted) return;
     setDeleteError(null);
-    const result = await onDeleteEncrypted(affiliate.id);
+    const result = await onDeleteEncrypted(affiliate.id, {
+      curp: curp || undefined,
+    });
     if (!result.ok) {
       setDeleteError(result.error || 'No se pudo dar de baja. Reintenta.');
       return;

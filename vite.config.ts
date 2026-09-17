@@ -18,6 +18,11 @@ import {
   processSecureAffiliateDeleteRequest,
   type SecureDeleteBody,
 } from './api/affiliates/secureDeleteCore';
+import {
+  processAuditAppendRequest,
+  processAuditListRequest,
+  type AuditAppendBody,
+} from './api/audit/auditCore';
 import type { ListaNominalQuery } from './types';
 
 /** Proxy local /api/groq-ine (misma lógica que Vercel) para demos con Vite. */
@@ -320,6 +325,133 @@ function localSecureAffiliateDeleteProxy(env: Record<string, string>): Plugin {
   };
 }
 
+/** Proxy local POST /api/audit/append (APO-AUDIT-FORENSIC). */
+function localAuditAppendProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'local-audit-append-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url?.split('?')[0];
+        if (url !== '/api/audit/append') {
+          next();
+          return;
+        }
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          res.end();
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          for (const [k, v] of Object.entries(env)) {
+            if (v && !process.env[k]) process.env[k] = v;
+          }
+
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const body = (raw ? JSON.parse(raw) : {}) as AuditAppendBody;
+          const authorizationHeader =
+            typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const allowAnonymousFailure =
+            body.action === 'LOGIN_FAILURE' ||
+            body.action === 'LOGIN_SUCCESS' ||
+            body.action === 'LOGOUT';
+
+          const result = await processAuditAppendRequest(body, {
+            authorizationHeader,
+            allowAnonymousFailure,
+            meta: {
+              headers: req.headers as {
+                [k: string]: string | string[] | undefined;
+              },
+            },
+          });
+
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result.body));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Proxy local audit append error';
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: message }));
+        }
+      });
+    },
+  };
+}
+
+/** Proxy local GET /api/audit/list (APO-AUDIT-FORENSIC). */
+function localAuditListProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'local-audit-list-proxy',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const rawUrl = req.url || '';
+        const url = rawUrl.split('?')[0];
+        if (url !== '/api/audit/list') {
+          next();
+          return;
+        }
+
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+          res.end();
+          return;
+        }
+
+        if (req.method !== 'GET') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Method not allowed' }));
+          return;
+        }
+
+        try {
+          for (const [k, v] of Object.entries(env)) {
+            if (v && !process.env[k]) process.env[k] = v;
+          }
+
+          const authorizationHeader =
+            typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const q = new URL(rawUrl, 'http://localhost').searchParams;
+          const limitRaw = q.get('limit');
+          const limit = limitRaw ? Number(limitRaw) : undefined;
+
+          const result = await processAuditListRequest({
+            authorizationHeader,
+            limit: Number.isFinite(limit) ? limit : undefined,
+          });
+
+          res.statusCode = result.status;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result.body));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Proxy local audit list error';
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: message }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
 
@@ -331,6 +463,8 @@ export default defineConfig(({ mode }) => {
       localSecureAffiliateProxy(env),
       localSecureAffiliateListProxy(env),
       localSecureAffiliateDeleteProxy(env),
+      localAuditAppendProxy(env),
+      localAuditListProxy(env),
     ],
     server: {
       port: 3000,
