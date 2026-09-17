@@ -152,7 +152,7 @@ export async function processListaNominalRequest(params: {
   }
 
   const validated = validateListaNominalQuery(params.body || ({} as ListaNominalQuery));
-  if (!validated.ok) {
+  if (validated.ok === false) {
     return { status: 400, body: { error: validated.error } };
   }
 
