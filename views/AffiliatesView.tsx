@@ -123,7 +123,9 @@ const AffiliatesView: React.FC<AffiliatesViewProps> = ({ user }) => {
   if (error) {
     return (
       <div className="space-y-4 rounded-lg border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-950/40">
-        <p className="text-red-700 dark:text-red-300">{error}</p>
+        <p className="text-red-700 dark:text-red-300">
+          {typeof error === 'string' ? error : 'No se pudieron cargar los afiliados.'}
+        </p>
         <div className="flex flex-wrap gap-3">
           {encryptedAdmin.enabled && (
             <Button onClick={() => encryptedAdmin.refetch()}>Reintentar</Button>
