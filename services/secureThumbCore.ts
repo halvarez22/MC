@@ -2,8 +2,8 @@
  * APO-ADMIN-INE-THUMB — núcleo GET miniatura Admin.
  */
 
-import { authorizeAdminListBearer } from './secureListCore.js';
-import { getAffiliateFrontThumb } from '../../services/affiliateMediaStore.js';
+import { authorizeAdminListBearer } from '../api/affiliates/secureListCore.js';
+import { getAffiliateFrontThumb } from './affiliateMediaStore.js';
 
 export async function processSecureThumbRequest(opts: {
   authorizationHeader?: string;

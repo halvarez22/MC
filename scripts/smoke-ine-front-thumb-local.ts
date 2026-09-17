@@ -4,7 +4,7 @@
  */
 import { processSecureAffiliateRequest } from '../api/affiliates/secureCore.ts';
 import { processSecureAffiliateDeleteRequest } from '../api/affiliates/secureDeleteCore.ts';
-import { processSecureThumbRequest } from '../api/affiliates/secureThumbCore.ts';
+import { processSecureThumbRequest } from '../services/secureThumbCore.ts';
 import { __resetAffiliateMediaForTests } from '../services/affiliateMediaStore.ts';
 import {
   isJpegMagic,

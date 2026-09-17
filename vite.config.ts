@@ -18,7 +18,7 @@ import {
   processSecureAffiliateDeleteRequest,
   type SecureDeleteBody,
 } from './api/affiliates/secureDeleteCore';
-import { processSecureThumbRequest } from './api/affiliates/secureThumbCore';
+import { processSecureThumbRequest } from './services/secureThumbCore';
 import {
   processAuditAppendRequest,
   processAuditListRequest,
