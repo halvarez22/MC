@@ -10,11 +10,9 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   AFFILIATE_MEDIA_COLLECTION,
   buildIneFrontThumbStoragePath,
-} from './ineThumbConfig.js';
-import {
   stripDataUrlToBase64,
   validateIneFrontThumbBase64,
-} from './ineThumbService.js';
+} from './ineThumbConfig.js';
 
 export type AffiliateMediaMeta = {
   affiliateId: string;

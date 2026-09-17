@@ -9,7 +9,7 @@ import { __resetAffiliateMediaForTests } from '../services/affiliateMediaStore.t
 import {
   isJpegMagic,
   validateIneFrontThumbBase64,
-} from '../services/ineThumbService.ts';
+} from '../services/ineThumbConfig.ts';
 import { INE_FRONT_THUMB_MAX_BYTES } from '../services/ineThumbConfig.ts';
 
 const SECRET = process.env.ADMIN_LIST_SECRET || 'smoke-secret-thumb-test';
