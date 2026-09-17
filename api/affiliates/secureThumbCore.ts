@@ -25,7 +25,7 @@ export async function processSecureThumbRequest(opts: {
   }
 
   const result = await getAffiliateFrontThumb(affiliateId);
-  if (!result.ok) {
+  if (result.ok === false) {
     return { status: result.status, body: { error: result.error } };
   }
 

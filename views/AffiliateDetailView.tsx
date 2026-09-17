@@ -73,7 +73,7 @@ const AffiliateDetailView: React.FC<AffiliateDetailViewProps> = ({
     setThumbLoading(true);
     setThumbError(null);
     const result = await fetchAffiliateFrontThumb(affiliate.id);
-    if (result.ok) {
+    if (result.ok === true) {
       setThumbUrl(result.dataUrl);
     } else {
       setThumbUrl(null);

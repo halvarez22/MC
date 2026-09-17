@@ -177,7 +177,7 @@ export async function processSecureAffiliateRequest(
         affiliateId: record.id,
         thumbFrontJpegBase64: thumbB64,
       });
-      if (thumbResult.ok) {
+      if (thumbResult.ok === true) {
         thumbSaved = true;
       } else {
         thumbError = thumbResult.error;

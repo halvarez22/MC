@@ -102,7 +102,7 @@ export async function saveAffiliateFrontThumb(input: {
   }
 
   const validated = validateIneFrontThumbBase64(input.thumbFrontJpegBase64);
-  if (!validated.ok) {
+  if (validated.ok === false) {
     return { ok: false, error: validated.error };
   }
 

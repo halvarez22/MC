@@ -116,12 +116,12 @@ export async function buildIneFrontThumbBase64(
     let dataUrl = canvas.toDataURL('image/jpeg', q);
     let check = validateIneFrontThumbBase64(dataUrl, maxBytes);
     // Si aún grande, bajar calidad
-    while (!check.ok && q > 0.4) {
+    while (check.ok === false && q > 0.4) {
       q -= 0.1;
       dataUrl = canvas.toDataURL('image/jpeg', q);
       check = validateIneFrontThumbBase64(dataUrl, maxBytes);
     }
-    if (!check.ok) return null;
+    if (check.ok === false) return null;
     return stripDataUrlToBase64(dataUrl);
   } finally {
     bitmap.close();
