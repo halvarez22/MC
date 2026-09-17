@@ -29,6 +29,15 @@ export type AffiliateData = {
   email: string;
   phone: string;
   address: string;
+  /** APO-ADMIN-INE-VIEW I.B — opcionales; dual-read si faltan */
+  voterId?: string;
+  state?: string;
+  municipality?: string;
+  section?: string;
+  locality?: string;
+  registrationYear?: string;
+  emission?: string;
+  validity?: string;
 };
 
 /** Documento alineado a la colección Firestore encrypted_affiliates. */

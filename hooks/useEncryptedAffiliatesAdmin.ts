@@ -17,24 +17,37 @@ export type DecryptedAffiliateApiRow = {
   address: string;
   createdAt: string;
   blindCurpPrefix: string;
+  voterId?: string;
+  state?: string;
+  municipality?: string;
+  section?: string;
+  locality?: string;
+  registrationYear?: string;
+  emission?: string;
+  validity?: string;
 };
 
 const LIST_PATH = '/api/affiliates/secure-list';
 const DELETE_PATH = '/api/affiliates/secure-delete';
 
+function dash(v?: string): string {
+  const s = String(v ?? '').trim();
+  return s || '—';
+}
+
 function mapToAffiliate(row: DecryptedAffiliateApiRow): Affiliate {
   const ineData: INEData = {
     name: row.fullName,
     address: row.address,
-    voterId: '—',
+    voterId: dash(row.voterId),
     curp: row.curp,
-    registrationYear: '—',
-    state: '—',
-    municipality: '—',
-    section: '—',
-    locality: '—',
-    emission: '—',
-    validity: '—',
+    registrationYear: dash(row.registrationYear),
+    state: dash(row.state),
+    municipality: dash(row.municipality),
+    section: dash(row.section),
+    locality: dash(row.locality),
+    emission: dash(row.emission),
+    validity: dash(row.validity),
     extractedAt: row.createdAt,
   };
 
@@ -47,8 +60,8 @@ function mapToAffiliate(row: DecryptedAffiliateApiRow): Affiliate {
     email: row.email,
     phone: row.phone,
     address: row.address,
-    city: '—',
-    state: '—',
+    city: dash(row.municipality),
+    state: dash(row.state),
     zip: '—',
     status: 'activo',
     documentation,

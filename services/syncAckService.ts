@@ -36,28 +36,47 @@ function asRecord(data: unknown): StructuredLike {
   return data && typeof data === 'object' ? (data as StructuredLike) : {};
 }
 
-/** Mapea extracción INE → payload cifrado (campos mínimos no vacíos). */
+/** Mapea extracción INE → payload cifrado (campos mínimos + opcionales INE). */
 export function structuredDataToAffiliatePayload(structuredData: unknown): {
   fullName: string;
   curp: string;
   email: string;
   phone: string;
   address: string;
+  voterId?: string;
+  state?: string;
+  municipality?: string;
+  section?: string;
+  locality?: string;
+  registrationYear?: string;
+  emission?: string;
+  validity?: string;
 } {
   const o = asRecord(structuredData);
   const curp = String(o.curp || o.CURP || '').trim().toUpperCase();
+  const opt = (v: unknown) => {
+    const s = String(v ?? '').trim();
+    return s || undefined;
+  };
   return {
     fullName: String(o.nombre_completo || o.fullName || o.nombre || 'SIN_NOMBRE').trim(),
     curp,
     email: String(o.email || 'noreply@local.invalid').trim(),
     phone: String(o.phone || o.telefono || '0000000000').trim(),
-    address: String(o.address || o.domicilio || 'SIN_DOMICILIO').trim(),
+    address: String(o.address || o.domicilio || o.domicilio_lineas || 'SIN_DOMICILIO').trim(),
+    voterId: opt(o.voterId || o.clave_elector),
+    state: opt(o.state || o.estado_nombre || o.estado),
+    municipality: opt(o.municipality || o.municipio_nombre || o.municipio),
+    section: opt(o.section || o.seccion),
+    locality: opt(o.locality || o.localidad),
+    registrationYear: opt(o.registrationYear || o.anio_registro),
+    emission: opt(o.emission || o.fecha_emision),
+    validity: opt(o.validity || o.fecha_vigencia),
   };
 }
 
 /**
- * APO-FIELD-PERSIST: form Modo Campo → payload para POST /api/affiliates/secure.
- * Preferir CURP de INE; address compuesto desde domicilio normalizado OCR-MAP.
+ * APO-FIELD-PERSIST + INE-VIEW: form Modo Campo → payload secure.
  */
 export function fieldFormToSecureSyncInput(input: {
   fullName: string;
@@ -69,10 +88,23 @@ export function fieldFormToSecureSyncInput(input: {
   zip?: string;
   curp?: string;
   orgId?: string;
+  voterId?: string;
+  municipality?: string;
+  section?: string;
+  locality?: string;
+  registrationYear?: string;
+  emission?: string;
+  validity?: string;
+  /** Estado INE (nombre); si falta, usa state del form */
+  ineState?: string;
 }): Record<string, unknown> {
   const addressParts = [input.address, input.city, input.state, input.zip]
     .map((p) => String(p || '').trim())
     .filter(Boolean);
+  const opt = (v?: string) => {
+    const s = String(v ?? '').trim();
+    return s || undefined;
+  };
   return {
     fullName: String(input.fullName || '').trim(),
     nombre_completo: String(input.fullName || '').trim(),
@@ -82,6 +114,18 @@ export function fieldFormToSecureSyncInput(input: {
     address: addressParts.join(', ') || 'SIN_DOMICILIO',
     domicilio: addressParts.join(', ') || 'SIN_DOMICILIO',
     ...(input.orgId?.trim() ? { orgId: input.orgId.trim() } : {}),
+    ...(opt(input.voterId) ? { voterId: opt(input.voterId), clave_elector: opt(input.voterId) } : {}),
+    ...(opt(input.ineState || input.state)
+      ? { state: opt(input.ineState || input.state), estado_nombre: opt(input.ineState || input.state) }
+      : {}),
+    ...(opt(input.municipality)
+      ? { municipality: opt(input.municipality), municipio_nombre: opt(input.municipality) }
+      : {}),
+    ...(opt(input.section) ? { section: opt(input.section), seccion: opt(input.section) } : {}),
+    ...(opt(input.locality) ? { locality: opt(input.locality), localidad: opt(input.locality) } : {}),
+    ...(opt(input.registrationYear) ? { registrationYear: opt(input.registrationYear) } : {}),
+    ...(opt(input.emission) ? { emission: opt(input.emission), fecha_emision: opt(input.emission) } : {}),
+    ...(opt(input.validity) ? { validity: opt(input.validity), fecha_vigencia: opt(input.validity) } : {}),
   };
 }
 

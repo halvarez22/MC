@@ -5,6 +5,7 @@
 
 import {
   decryptAffiliateRecord,
+  type AffiliateData,
   type EncryptedAffiliateRecord,
 } from '../../services/cloudEncryptionService.js';
 import { listEncryptedByOrg } from '../../services/encryptedAffiliateFirebaseStore.js';
@@ -18,6 +19,14 @@ export type DecryptedAffiliateDto = {
   address: string;
   createdAt: string;
   blindCurpPrefix: string;
+  voterId?: string;
+  state?: string;
+  municipality?: string;
+  section?: string;
+  locality?: string;
+  registrationYear?: string;
+  emission?: string;
+  validity?: string;
 };
 
 export type SecureListResult = { status: number; body: Record<string, unknown> };
@@ -56,14 +65,12 @@ export function resolveAdminListOrgId(): string {
   return resolveAdminListOrgIds()[0] || 'org_default';
 }
 
-function toDto(record: EncryptedAffiliateRecord, plain: {
-  fullName: string;
-  curp: string;
-  email: string;
-  phone: string;
-  address: string;
-}): DecryptedAffiliateDto {
+function toDto(record: EncryptedAffiliateRecord, plain: AffiliateData): DecryptedAffiliateDto {
   const blind = record.blind_curp || '';
+  const opt = (v?: string) => {
+    const s = String(v ?? '').trim();
+    return s || undefined;
+  };
   return {
     id: record.id,
     fullName: plain.fullName,
@@ -73,6 +80,14 @@ function toDto(record: EncryptedAffiliateRecord, plain: {
     address: plain.address,
     createdAt: record.created_at || new Date().toISOString(),
     blindCurpPrefix: blind.slice(0, 8),
+    voterId: opt(plain.voterId),
+    state: opt(plain.state),
+    municipality: opt(plain.municipality),
+    section: opt(plain.section),
+    locality: opt(plain.locality),
+    registrationYear: opt(plain.registrationYear),
+    emission: opt(plain.emission),
+    validity: opt(plain.validity),
   };
 }
 

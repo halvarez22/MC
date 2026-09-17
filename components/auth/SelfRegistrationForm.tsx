@@ -287,6 +287,13 @@ const SelfRegistrationForm: React.FC<SelfRegistrationFormProps> = ({ onSuccess, 
                     state: formData.state,
                     zip: formData.zip,
                     curp: curpCandidate,
+                    voterId: ineData?.clave_elector,
+                    ineState: ineData?.estado_nombre || ineData?.estado || formData.state,
+                    municipality: ineData?.municipio_nombre || ineData?.municipio,
+                    section: ineData?.seccion,
+                    locality: ineData?.localidad,
+                    emission: ineData?.fecha_emision,
+                    validity: ineData?.fecha_vigencia,
                 });
 
                 // 201 y 409 (duplicado) = éxito operativo (dato seguro en bóveda)
